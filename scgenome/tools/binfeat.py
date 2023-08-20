@@ -67,7 +67,7 @@ def add_cyto_giemsa_stain(bins):
     """    
 
     bins_pr = scgenome.tools.ranges.dataframe_to_pyranges(bins.rename_axis('_index').reset_index())
-    cyto_pr = scgenome.tools.ranges.dataframe_to_pyranges(scgenome.refgenome.info.cytobands)
+    cyto_pr = scgenome.tools.ranges.dataframe_to_pyranges(scgenome.refgenome.cytobands())
 
     intersect_1 = bins_pr.intersect(cyto_pr)
     intersect_2 = cyto_pr.intersect(bins_pr)
