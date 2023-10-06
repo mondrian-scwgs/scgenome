@@ -145,9 +145,13 @@ class GenomeWidePlot(object):
 
     def squash_y_axis(self):
         squash_coeff = 0.15
-        squash_f = lambda a: np.tanh(squash_coeff * a)
+        squash_fwd = lambda a: np.tanh(squash_coeff * a)
+        squash_rev = lambda a: np.arctanh(a) / squash_coeff
+        self.ax.set_yscale('function', functions=(squash_fwd, squash_rev))
 
-        self.ax.set_yscale('function', functions=(squash_f, squash_f))
+        yticks = np.array([0, 2, 4, 7, 20])
+        self.ax.set_yticks(yticks)
+
         return self.fig
 
     def annotate_gene(self, gene_name, gene_chr, gene_start, v_locator=0):
