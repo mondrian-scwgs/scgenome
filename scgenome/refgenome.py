@@ -21,7 +21,10 @@ def read_cytobands(cyto_filename, remove_chr_prefix=False):
 
 
 class RefGenomeInfo(object):
-    def __init__(self, version, chromosomes=None, plot_chromosomes=None):
+    def __init__(self, version='hg19', chromosomes=None, plot_chromosomes=None):
+        if chromosomes is not None and plot_chromosomes is None:
+            plot_chromosomes = [v.strip('chr') for v in chromosomes]
+
         if version == 'hg19':
             self.chromosomes = chromosomes or [str(a) for a in range(1, 23)] + ['X', 'Y']
             self.plot_chromosomes = plot_chromosomes or [str(a) for a in range(1, 23)] + ['X', 'Y']

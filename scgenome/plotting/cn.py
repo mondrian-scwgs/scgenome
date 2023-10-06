@@ -63,13 +63,86 @@ plt.savefig('out.png')
 
 """
 import matplotlib
-import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
 from anndata import AnnData
 from scgenome import refgenome
 from scipy.sparse import issparse
 from scgenome.plotting import cn_colors
+
+import matplotlib.pyplot as plt
+import matplotlib.units as units
+import matplotlib.ticker as ticker
+
+
+class ChromPos:
+    def __init__(self, chrom, pos, refgenomeinfo):
+        self.chr = chrom
+        self.pos = pos
+        self.refgenomeinfo = refgenomeinfo
+
+
+class ChromPosConverter(units.ConversionInterface):
+
+    @staticmethod
+    def convert(value, unit, axis):
+
+        if isinstance(value, ChromPos):
+            chrominfo = value.refgenomeinfo.chromosome_info
+            return value.pos + chrominfo[chrominfo['chr'] == value.chr].iloc[0]['chromosome_start']
+        else:
+            return [val.pos +
+                    val.refgenomeinfo.chromosome_info[val.refgenomeinfo.chromosome_info['chr'] == val.chr].iloc[0][
+                        'chromosome_start'] for val in value]
+
+    @staticmethod
+    def axisinfo(unit, axis):
+        if isinstance(unit, list):
+            refgenomeinfo = unit[0].refgenomeinfo
+        else:
+            refgenomeinfo = unit.refgenomeinfo
+
+        if len(refgenomeinfo.plot_chromosomes) == 1:
+            chromosome = refgenomeinfo.chromosomes[0]
+            chromosome_length = refgenomeinfo.chromosome_info.set_index('chr').loc[chromosome, 'chromosome_length']
+            chromosome_start = refgenomeinfo.chromosome_info.set_index('chr').loc[chromosome, 'chromosome_start']
+            chromosome_end = refgenomeinfo.chromosome_info.set_index('chr').loc[chromosome, 'chromosome_end']
+            xticks = np.arange(0, chromosome_length + 2e7, 2e7)
+            xticklabels = ['{0:d}M'.format(int(x / 1e6)) for x in xticks]
+            xminorticks = np.arange(0, chromosome_length, 1e6)
+
+            label = f'chromosome {refgenomeinfo.plot_chromosomes[0]}'
+            majfmt = ticker.FixedFormatter(xticklabels)
+            majloc = ticker.FixedLocator(xticks + chromosome_start)
+            minloc = ticker.FixedLocator(xminorticks + chromosome_start)
+            minfmt = ticker.NullFormatter()
+            default_limits = [chromosome_start, chromosome_end]
+        else:
+            positions = refgenomeinfo.chromosome_info
+
+            label = 'chromosome'
+            majloc = ticker.FixedLocator([0] + positions['chromosome_end'].tolist())
+            majfmt = ticker.NullFormatter()
+            minloc = ticker.FixedLocator(positions['chromosome_mid'].tolist())
+            minfmt = ticker.FixedFormatter(refgenomeinfo.plot_chromosomes)
+            default_limits = [0, max(positions['chromosome_end'])]
+
+        return units.AxisInfo(
+            majloc=majloc,
+            majfmt=majfmt,
+            minloc=minloc,
+            minfmt=minfmt,
+            label=label,
+            default_limits=default_limits
+        )
+
+    @staticmethod
+    def default_units(x, axis):
+        return x
+
+
+units.registry[ChromPos] = ChromPosConverter()
+
 
 class GenomeWidePlot(object):
     def __init__(
@@ -78,6 +151,7 @@ class GenomeWidePlot(object):
             plot_function,
             ax=None,
             position_columns=('start',),
+            chromosomes=None,
             **kwargs
     ):
         self.data = data
@@ -91,57 +165,22 @@ class GenomeWidePlot(object):
             self.fig = plt.gcf()
             self.ax = ax
 
-        self.refgenome_chromosomes = refgenome.info.chromosomes
-        self.refgenome_plot_chromosomes = refgenome.info.plot_chromosomes
-        self.refgenome_chromosome_info = refgenome.info.chromosome_info
+        self.refgenomeinfo = refgenome.RefGenomeInfo(chromosomes=chromosomes)
 
         self.add_chromosome_info()
         plot_function(self.data, ax=ax, **self.kwargs)
-        self.setup_genome_axis()
-
-    def setup_genome_axis(self):
-        self.ax.set_xlim((-0.5, self.refgenome_chromosome_info['chromosome_end'].max()))
-        self.ax.set_xlabel('chromosome')
-        self.ax.set_xticks([0] + self.refgenome_chromosome_info['chromosome_end'].values.tolist())
-        self.ax.set_xticklabels([])
-        self.ax.xaxis.tick_bottom()
-        self.ax.yaxis.tick_left()
-        self.ax.xaxis.set_minor_locator(
-            matplotlib.ticker.FixedLocator(self.refgenome_chromosome_info['chromosome_mid'])
-        )
-        self.ax.xaxis.set_minor_formatter(matplotlib.ticker.FixedFormatter(self.refgenome_plot_chromosomes))
         self.ax.spines[['right', 'top']].set_visible(False)
 
     def add_chromosome_info(self):
-        self.data = self.data.merge(self.refgenome_chromosome_info)
-        self.data = self.data[self.data['chr'].isin(self.refgenome_chromosomes)]
+        self.data = self.data.merge(self.refgenomeinfo.chromosome_info)
+        self.data = self.data[self.data['chr'].isin(self.refgenomeinfo.chromosomes)]
         for columns in self.position_columns:
-            self.data[columns] = self.data[columns] + self.data['chromosome_start']
+            self.data[columns] = self.data.apply(lambda x: ChromPos(x.chr, x[columns], self.refgenomeinfo), axis=1)
 
     def set_ylims(self, y_min, y_max):
         self.ax.set_ylim((-0.05 * y_max, y_max))
         self.ax.set_yticks(range(y_min, int(y_max) + 1))
         self.ax.spines['left'].set_bounds(0, y_max)
-
-    def view_chromosome(self, chromosome):
-        chromosome_length = self.refgenome_chromosome_info.set_index('chr').loc[
-            chromosome, 'chromosome_length']
-        chromosome_start = self.refgenome_chromosome_info.set_index('chr').loc[chromosome, 'chromosome_start']
-        chromosome_end = self.refgenome_chromosome_info.set_index('chr').loc[chromosome, 'chromosome_end']
-        xticks = np.arange(0, chromosome_length, 2e7)
-        xticklabels = ['{0:d}M'.format(int(x / 1e6)) for x in xticks]
-        xminorticks = np.arange(0, chromosome_length, 1e6)
-        self.ax.set_xlabel(f'chromosome {chromosome}')
-        self.ax.set_xticks(xticks + chromosome_start)
-        self.ax.set_xticklabels(xticklabels)
-        self.ax.xaxis.set_minor_locator(matplotlib.ticker.FixedLocator(xminorticks + chromosome_start))
-        self.ax.xaxis.set_minor_formatter(matplotlib.ticker.NullFormatter())
-        self.ax.set_xlim(chromosome_start, chromosome_end)
-        return self.fig
-
-    def view_entire_genome(self):
-        self.setup_genome_axis()
-        return self.fig
 
     def squash_y_axis(self):
         squash_coeff = 0.15
@@ -156,12 +195,16 @@ class GenomeWidePlot(object):
 
     def annotate_gene(self, gene_name, gene_chr, gene_start, v_locator=0):
 
-        loc = self.refgenome_chromosome_info.query(f'chr == "{gene_chr}"')['chromosome_start']
+        loc = self.refgenomeinfo.chromosome_info.query(f'chr == "{gene_chr}"')['chromosome_start']
         assert len(loc) == 1
         loc = loc.iloc[0] + gene_start
 
         plt.axvline(loc, color='k', ls=':')
         plt.annotate(gene_name, (loc, 1 + 0.1 * v_locator))
+
+    def chromosome_ticks_to_display(self, chromosomes):
+        ticks = [v if v in chromosomes else "" for v in self.refgenomeinfo.plot_chromosomes]
+        self.ax.xaxis.set_minor_formatter(matplotlib.ticker.FixedFormatter(ticks))
 
 
 def plot_cn_profile(
@@ -235,6 +278,7 @@ def plot_cn_profile(
     def scatterplot(data, y=None, ax=None, **kwargs):
         sns.scatterplot(x='start', y=y, data=data, ax=ax, linewidth=0, legend=False, **kwargs)
 
+
     gwp = GenomeWidePlot(
         cn_data,
         scatterplot,
@@ -242,11 +286,9 @@ def plot_cn_profile(
         ax=ax,
         s=s,
         y='value',
+        chromosomes=[chromosome] if chromosome is not None else None,
         palette=cn_colors.color_reference
     )
-
-    if chromosome is not None:
-        gwp.view_chromosome(chromosome)
 
     if squashy:
         gwp.squash_y_axis()
@@ -313,11 +355,9 @@ def plot_var_profile(
         hue=cn_field_name,
         ax=ax,
         s=s,
+        chromosomes=[chromosome] if chromosome is not None else None,
         y=value_field_name,
     )
-
-    if chromosome is not None:
-        gwp.view_chromosome(chromosome)
 
     if squashy:
         gwp.squash_y_axis()
