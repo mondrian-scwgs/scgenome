@@ -21,24 +21,24 @@ def read_cytobands(cyto_filename, remove_chr_prefix=False):
 
 
 class RefGenomeInfo(object):
-    def __init__(self, version):
+    def __init__(self, version, chromosomes=None, plot_chromosomes=None):
         if version == 'hg19':
-            self.chromosomes = [str(a) for a in range(1, 23)] + ['X', 'Y']
-            self.plot_chromosomes = [str(a) for a in range(1, 23)] + ['X', 'Y']
+            self.chromosomes = chromosomes or [str(a) for a in range(1, 23)] + ['X', 'Y']
+            self.plot_chromosomes = plot_chromosomes or [str(a) for a in range(1, 23)] + ['X', 'Y']
             self.genome_fasta_index = pkg_resources.resource_filename('scgenome', 'data/hg19.fa.fai')
             self.cyto_filename = pkg_resources.resource_filename('scgenome', 'data/hg19_cytoBand.txt.gz')
             self.cytobands = read_cytobands(self.cyto_filename, remove_chr_prefix=True)
 
         elif version == 'grch38':
-            self.chromosomes = [f'chr{a}' for a in range(1, 23)] + ['chrX', 'chrY']
-            self.plot_chromosomes = [str(a) for a in range(1, 23)] + ['X', 'Y']
+            self.chromosomes = chromosomes or [f'chr{a}' for a in range(1, 23)] + ['chrX', 'chrY']
+            self.plot_chromosomes = plot_chromosomes or [str(a) for a in range(1, 23)] + ['X', 'Y']
             self.genome_fasta_index = pkg_resources.resource_filename('scgenome', 'data/grch38.fa.fai')
             self.cyto_filename = pkg_resources.resource_filename('scgenome', 'data/grch38_cytoBand.txt.gz')
             self.cytobands = read_cytobands(self.cyto_filename, remove_chr_prefix=False)
 
         elif version == 'mm10':
-            self.chromosomes = [str(a) for a in range(1, 20)] + ['X', 'Y']
-            self.plot_chromosomes = [str(a) for a in range(1, 20)] + ['X', 'Y']
+            self.chromosomes = chromosomes or [str(a) for a in range(1, 20)] + ['X', 'Y']
+            self.plot_chromosomes = plot_chromosomes or [str(a) for a in range(1, 20)] + ['X', 'Y']
             self.genome_fasta_index = pkg_resources.resource_filename('scgenome', 'data/mm10.fa.fai')
             self.cyto_filename = pkg_resources.resource_filename('scgenome', 'data/mm10_cytoBand.txt.gz')
             self.cytobands = read_cytobands(self.cyto_filename, remove_chr_prefix=True)
@@ -66,9 +66,9 @@ class RefGenomeInfo(object):
 info = None
 
 
-def set_genome_version(version):
+def set_genome_version(version, chromosomes=None, plot_chromosomes=None):
     global info
-    info = RefGenomeInfo(version)
+    info = RefGenomeInfo(version, chromosomes=chromosomes, plot_chromosomes=plot_chromosomes)
 
 set_genome_version('hg19')
 
