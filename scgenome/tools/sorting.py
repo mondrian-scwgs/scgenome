@@ -70,7 +70,7 @@ def sort_cells(
     ordering = np.zeros(idx.shape[0], dtype=int)
     ordering[idx] = np.arange(idx.shape[0])
 
-    adata.obs['cell_order'] = '-1'
+    adata.obs['cell_order'] = np.NaN
     adata.obs.loc[cell_ids, 'cell_order'] = pd.Series(ordering, index=adata.obs.loc[cell_ids].index)
 
     return adata
@@ -124,7 +124,7 @@ def sort_clusters(
         layer_name=layer_name,
         standarize=standarize)
 
-    adata.obs['cell_order'] = '-1'
+    adata.obs['cell_order'] = np.NaN
     adata.obs.loc[cell_ids, 'cluster_order'] = pd.Series(
         adata_clusters.obs.loc[adata.obs.loc[cell_ids, 'cluster_id'].values, 'cell_order'].values,
         index=adata.obs.loc[cell_ids].index)
