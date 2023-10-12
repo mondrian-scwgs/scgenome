@@ -79,6 +79,7 @@ def sort_cells(
 def sort_clusters(
         adata: AnnData,
         layer_name: Union[None, str, Iterable[Union[None,str]]]='copy',
+        cluster_col: str='cluster_id',
         agg_X: Any=None,
         agg_layers: Dict=None,
         cell_ids: Iterable[str]=None,
@@ -93,6 +94,8 @@ def sort_clusters(
         copy number data
     layer_name : str, optional
         layer with copy number data to use for sorting, None for X, by default 'copy'
+    cluster_col : str, optional
+        column of cluster labels to sort
     agg_X : Any
         function to aggregate X, by default None
     agg_layers : Dict, optional
@@ -117,7 +120,7 @@ def sort_clusters(
         bin_ids = adata.var.index
 
     adata_clusters = scgenome.tools.cluster.aggregate_clusters(
-        adata[cell_ids, bin_ids], agg_X=agg_X, agg_layers=agg_layers)
+        adata[cell_ids, bin_ids], cluster_col=cluster_col, agg_X=agg_X, agg_layers=agg_layers)
 
     adata_clusters = sort_cells(
         adata_clusters,
