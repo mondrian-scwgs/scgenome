@@ -2,6 +2,7 @@
 
 
 def prune_leaves(tree, f):
+    branch_lengths = {a.name: a.branch_length for a in tree.find_clades()}
     while tree.count_terminals() > 0:
         altered = False
         for a in tree.get_terminals():
@@ -10,6 +11,9 @@ def prune_leaves(tree, f):
                 altered = True
         if not altered:
             break
+    # HACK: fix bug resulting from biophylo prune
+    for a in tree.find_clades():
+        a.branch_length = branch_lengths[a.name]
 
 
 def align_cn_tree(tree, adata):
