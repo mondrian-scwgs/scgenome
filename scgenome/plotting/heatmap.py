@@ -425,7 +425,7 @@ def plot_cell_cn_matrix_fig(
         tree_ax.set_xlabel('branch length', fontsize=8)
         tree_ax.set_ylabel('')
         tree_ax.set_yticks([])
-        tree_ax.set_ylim((0.5, tree.count_terminals() + 0.5))
+        tree_ax.set_ylim((tree.count_terminals() + 0.5, 0.5))
 
     heatmap_ax = axes[heatmap_ax_row_idx, heatmap_ax_col_idx]
     ax_legend = axes_legends[0]
