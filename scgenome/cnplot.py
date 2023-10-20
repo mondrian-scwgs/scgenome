@@ -55,7 +55,7 @@ def _secondary_clustering(data):
 
 
 def plot_cell_cn_profile(ax, cn_data, value_field_name, cn_field_name=None, max_cn=13, chromosome=None, s=5,
-                         squashy=False, rawy=False, cmap=None):
+                         squashy=False, rawy=False, cmap=None, label=None):
     """ Plot copy number profile on a genome axis
 
     Args:
@@ -70,6 +70,7 @@ def plot_cell_cn_profile(ax, cn_data, value_field_name, cn_field_name=None, max_
         s: size of scatter points
         squashy: compress y axis
         rawy: raw data on y axis
+        label: label for data to pass to scatter
 
     The cn_data table should have the following columns (in addition to value_field_name and
     optionally cn_field_name):
@@ -95,17 +96,18 @@ def plot_cell_cn_profile(ax, cn_data, value_field_name, cn_field_name=None, max_
             ax.scatter(
                 plot_data['start'], plot_data[value_field_name],
                 c=plot_data[cn_field_name], s=s,
-                cmap=cmap,
+                cmap=cmap, label=label,
             )
         else:
             ax.scatter(
                 plot_data['start'], plot_data[value_field_name],
                 c=plot_data[cn_field_name], s=s,
                 cmap=get_cn_cmap(plot_data[cn_field_name].astype(int).values),
+                label=label,
             )
     else:
         ax.scatter(
-            plot_data['start'], plot_data[value_field_name], s=s,
+            plot_data['start'], plot_data[value_field_name], s=s, label=label,
         )
 
     if chromosome is not None:
