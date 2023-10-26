@@ -22,7 +22,7 @@ def initialize(version='hg19', chromosomes=None):
     this.plot_chromosomes = get_plot_chromosomes(this.chromosomes)
     this.cytobands = get_cytobands(this.version)
     this.chromosome_info = get_chromosome_info(this.version, this.chromosomes, this.plot_chromosomes)
-
+    this.chromosome_starts = get_chromosome_starts(this.chromosome_info)
 
 def read_chromosome_lengths(genome_fasta_index):
     chromosome_lengths = pd.read_csv(
@@ -75,6 +75,10 @@ def get_cytobands(version):
     else:
         raise ValueError()
     return cytobands
+
+
+def get_chromosome_starts(chromosome_info):
+    return chromosome_info[['chr', 'chromosome_start']].set_index('chr').to_dict()['chromosome_start']
 
 
 def get_chromosome_info(version, chromosomes, plot_chromosomes):

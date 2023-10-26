@@ -73,8 +73,10 @@ from scgenome.plotting import cn_colors
 import matplotlib.pyplot as plt
 import matplotlib.units as units
 import matplotlib.ticker as ticker
+import pandas as pd
 
 refgenome.initialize()
+
 
 class ChromPos:
     def __init__(self, chrom, pos):
@@ -86,13 +88,12 @@ class ChromPosConverter(units.ConversionInterface):
 
     @staticmethod
     def convert(value, unit, axis):
-
         if isinstance(value, ChromPos):
-            return value.pos + refgenome.chromosome_info[refgenome.chromosome_info['chr'] == value.chr].iloc[0]['chromosome_start']
+            return value.pos + refgenome.chromosome_starts[value.chr]
+        if isinstance(value, pd.Series):
+            return value.apply(lambda x: x.pos + refgenome.chromosome_starts[x.chr])
         else:
-            return [val.pos +
-                    refgenome.chromosome_info[refgenome.chromosome_info['chr'] == val.chr].iloc[0][
-                        'chromosome_start'] for val in value]
+            return [val.pos + refgenome.chromosome_starts[val.chr] for val in value]
 
     @staticmethod
     def axisinfo(unit, axis):
@@ -272,7 +273,6 @@ def plot_cn_profile(
 
     def scatterplot(data, y=None, ax=None, **kwargs):
         sns.scatterplot(x='start', y=y, data=data, ax=ax, linewidth=0, legend=False, **kwargs)
-
 
     gwp = GenomeWidePlot(
         cn_data,
