@@ -207,7 +207,6 @@ def plot_cn_profile(
         state_layer_name=None,
         ax=None,
         max_cn=13,
-        chromosome=None,
         s=5,
         squashy=False,
 ):
@@ -248,9 +247,6 @@ def plot_cn_profile(
 
     TODO: missing return
     """
-    if chromosome is not None:
-        refgenome.initialize(chromosomes=[chromosome])
-
     cn_data = adata.var.copy()
 
     if value_layer_name is not None:
@@ -297,7 +293,6 @@ def plot_var_profile(
         value_field_name,
         cn_field_name=None,
         ax=None,
-        chromosome=None,
         s=5,
         max_cn=12,
         squashy=False
@@ -337,9 +332,6 @@ def plot_var_profile(
 
     TODO: missing return
     """
-
-    if chromosome is not None:
-        refgenome.initialize(chromosomes=[chromosome])
 
     def scatterplot(data, y=None, ax=None, **kwargs):
         sns.scatterplot(x='start', y=y, data=data, ax=ax, linewidth=0, **kwargs)
