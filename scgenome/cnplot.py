@@ -11,7 +11,7 @@ import seaborn as sns
 from matplotlib.colors import ListedColormap
 from scgenome import refgenome
 from sklearn.decomposition import PCA
-from scgenome.plotting.cn import GenomeWidePlot
+from scgenome.plotting.cn import plot_profile
 
 
 def hex_to_rgb(h):
@@ -147,18 +147,14 @@ def compute_pca_loadings(cn_data):
 def plot_pca_components(cn_data, n_components=4, plots_prefix=None):
     """ Plot the first n components of a PCA
     """
-    def scatterplot(data, y=None, ax=None, **kwargs):
-        sns.scatterplot(x='start', y=y, data=data, ax=ax, linewidth=0, **kwargs)
-
     components = compute_pca_loadings(cn_data)
 
     fig = plt.figure(figsize=(20, 4 * n_components))
     for idx in range(4):
         ax = fig.add_subplot(n_components, 1, idx + 1)
         plot_data = components.iloc[idx].T.rename('component').reset_index()
-        GenomeWidePlot(
+        plot_profile(
             plot_data,
-            scatterplot,
             ax=ax,
             s=5,
             y='component',

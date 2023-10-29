@@ -1,167 +1,171 @@
-"""
-
-usage:
-gwplot = GenomeWidePlot(
-    data, col_to_plot, plot_func
-)
-plt.savefig(out_png)
-
-data: dataframe with required cols: chr, start, end
-col_to_plot: col in data frame with the data we want to plot
-plot_func: function to be plotted
-
-
-to access the axes object:
-> gwplot.ax
-
-(can also be provided when instantiating GenomeWidePlot)
-
-
-To set x axis to one chromosome only:
-> gwplot.set_axis_to_chromosome(chromosome)
-
-
-Example usage:
-
-
-import pandas as pd
-
-data = pd.read_csv("small_dataset.csv.gz")
-
-data = data[data['cell_id'] == '130081A-R37-C13']
-
-
-fig = plt.Figure(figsize=(20,10))
-ax = plt.gca()
-
-gwplot = GenomeWidePlot(
-    data, 'copy', ax=ax, kind='scatter', hue='state', palette='cn'
-)
-
-data['copy'] = data['copy'] + 2
-blue_palette = {
-            0: '#01529B',
-            1: '#01529B',
-            2: '#01529B',
-            3: '#01529B',
-            4: '#01529B',
-            5: '#01529B',
-            6: '#01529B',
-            7: '#01529B',
-            8: '#01529B',
-            9: '#01529B',
-            10: '#01529B',
-            11: '#01529B'
-}
-
-gwplot = GenomeWidePlot(
-    data, 'copy', ax=ax, kind='scatter', hue='state', palette=blue_palette
-)
-
-
-plt.savefig('out.png')
-
-"""
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
 from anndata import AnnData
+from pandas import DataFrame
 from scgenome import refgenome
 from scipy.sparse import issparse
 from scgenome.plotting import cn_colors
+from scgenome.tools.getters import get_obs_data
 
-class GenomeWidePlot(object):
-    def __init__(
-            self,
-            data,
-            plot_function,
-            ax=None,
-            position_columns=('start',),
-            **kwargs
-    ):
-        self.data = data
-        self.kwargs = kwargs
-        self.position_columns = position_columns
 
-        if ax is None:
-            self.fig = plt.gcf()
-            self.ax = plt.gca()
+def genome_axis_plot(data, plot_function, position_columns, **kwargs):
+    data = data.merge(refgenome.info.chromosome_info)
+    for columns in position_columns:
+        data[columns] = data[columns] + data['chromosome_start']
+
+    plot_function(data=data, **kwargs)
+
+
+def setup_genome_xaxis_lims(ax, chromosome=None, start=None, end=None):
+    if chromosome is not None:
+        chromosome_start = refgenome.info.chromosome_info.set_index('chr').loc[chromosome, 'chromosome_start']
+        chromosome_end = refgenome.info.chromosome_info.set_index('chr').loc[chromosome, 'chromosome_end']
+
+        if start is not None:
+            plot_start = chromosome_start + start
         else:
-            self.fig = plt.gcf()
-            self.ax = ax
+            plot_start = chromosome_start
 
-        self.refgenome_chromosomes = refgenome.info.chromosomes
-        self.refgenome_plot_chromosomes = refgenome.info.plot_chromosomes
-        self.refgenome_chromosome_info = refgenome.info.chromosome_info
+        if end is not None:
+            plot_end = chromosome_start + end
+        else:
+            plot_end = chromosome_end
 
-        self.add_chromosome_info()
-        plot_function(self.data, ax=ax, **self.kwargs)
-        self.setup_genome_axis()
+    else:
+        plot_start = 0
+        plot_end = refgenome.info.chromosome_info['chromosome_end'].max()
 
-    def setup_genome_axis(self):
-        self.ax.set_xlim((-0.5, self.refgenome_chromosome_info['chromosome_end'].max()))
-        self.ax.set_xlabel('chromosome')
-        self.ax.set_xticks([0] + self.refgenome_chromosome_info['chromosome_end'].values.tolist())
-        self.ax.set_xticklabels([])
-        self.ax.xaxis.tick_bottom()
-        self.ax.yaxis.tick_left()
-        self.ax.xaxis.set_minor_locator(
-            matplotlib.ticker.FixedLocator(self.refgenome_chromosome_info['chromosome_mid'])
-        )
-        self.ax.xaxis.set_minor_formatter(matplotlib.ticker.FixedFormatter(self.refgenome_plot_chromosomes))
-        self.ax.spines[['right', 'top']].set_visible(False)
+    ax.set_xlim((plot_start-0.5, plot_end+0.5))
 
-    def add_chromosome_info(self):
-        self.data = self.data.merge(self.refgenome_chromosome_info)
-        self.data = self.data[self.data['chr'].isin(self.refgenome_chromosomes)]
-        for columns in self.position_columns:
-            self.data[columns] = self.data[columns] + self.data['chromosome_start']
 
-    def set_ylims(self, y_min, y_max):
-        self.ax.set_ylim((-0.05 * y_max, y_max))
-        self.ax.set_yticks(range(y_min, int(y_max) + 1))
-        self.ax.spines['left'].set_bounds(0, y_max)
-
-    def view_chromosome(self, chromosome):
-        chromosome_length = self.refgenome_chromosome_info.set_index('chr').loc[
+def setup_genome_xaxis_ticks(ax, chromosome=None, start=None, end=None):
+    if chromosome is not None:
+        chromosome_length = refgenome.info.chromosome_info.set_index('chr').loc[
             chromosome, 'chromosome_length']
-        chromosome_start = self.refgenome_chromosome_info.set_index('chr').loc[chromosome, 'chromosome_start']
-        chromosome_end = self.refgenome_chromosome_info.set_index('chr').loc[chromosome, 'chromosome_end']
+        chromosome_start = refgenome.info.chromosome_info.set_index('chr').loc[chromosome, 'chromosome_start']
+        chromosome_end = refgenome.info.chromosome_info.set_index('chr').loc[chromosome, 'chromosome_end']
         xticks = np.arange(0, chromosome_length, 2e7)
         xticklabels = ['{0:d}M'.format(int(x / 1e6)) for x in xticks]
         xminorticks = np.arange(0, chromosome_length, 1e6)
-        self.ax.set_xlabel(f'chromosome {chromosome}')
-        self.ax.set_xticks(xticks + chromosome_start)
-        self.ax.set_xticklabels(xticklabels)
-        self.ax.xaxis.set_minor_locator(matplotlib.ticker.FixedLocator(xminorticks + chromosome_start))
-        self.ax.xaxis.set_minor_formatter(matplotlib.ticker.NullFormatter())
-        self.ax.set_xlim(chromosome_start, chromosome_end)
-        return self.fig
+        ax.set_xticks(xticks + chromosome_start)
+        ax.set_xticklabels(xticklabels)
+        ax.xaxis.set_minor_locator(matplotlib.ticker.FixedLocator(xminorticks + chromosome_start))
+        ax.xaxis.set_minor_formatter(matplotlib.ticker.NullFormatter())
 
-    def view_entire_genome(self):
-        self.setup_genome_axis()
-        return self.fig
+    else:
+        ax.set_xticks([0] + refgenome.info.chromosome_info['chromosome_end'].values.tolist())
+        ax.set_xticklabels([])
+        ax.xaxis.tick_bottom()
+        ax.yaxis.tick_left()
+        ax.xaxis.set_minor_locator(
+            matplotlib.ticker.FixedLocator(refgenome.info.chromosome_info['chromosome_mid'])
+        )
+        ax.xaxis.set_minor_formatter(matplotlib.ticker.FixedFormatter(refgenome.info.chromosomes))
 
-    def squash_y_axis(self):
-        squash_coeff = 0.15
-        squash_fwd = lambda a: np.tanh(squash_coeff * a)
-        squash_rev = lambda a: np.arctanh(a) / squash_coeff
-        self.ax.set_yscale('function', functions=(squash_fwd, squash_rev))
 
-        yticks = np.array([0, 2, 4, 7, 20])
-        self.ax.set_yticks(yticks)
+def setup_squash_yaxis(ax):
+    squash_coeff = 0.15
+    squash_fwd = lambda a: np.tanh(squash_coeff * a)
+    squash_rev = lambda a: np.arctanh(a) / squash_coeff
+    ax.set_yscale('function', functions=(squash_fwd, squash_rev))
 
-        return self.fig
+    yticks = np.array([0, 2, 4, 7, 20])
+    ax.set_yticks(yticks)
 
-    def annotate_gene(self, gene_name, gene_chr, gene_start, v_locator=0):
 
-        loc = self.refgenome_chromosome_info.query(f'chr == "{gene_chr}"')['chromosome_start']
-        assert len(loc) == 1
-        loc = loc.iloc[0] + gene_start
+def plot_profile(
+        data: DataFrame,
+        y,
+        hue=None,
+        ax=None,
+        palette=None,
+        chromosome=None,
+        start=None,
+        end=None,
+        squashy=False,
+        **kwargs
+):
+    """Plot scatter points of copy number across the genome or a chromosome.
 
-        plt.axvline(loc, color='k', ls=':')
-        plt.annotate(gene_name, (loc, 1 + 0.1 * v_locator))
+    Parameters
+    ----------
+    data : pandas.DataFrame
+        copy number data
+        observation to plot
+    y : str
+        field with values for y axis
+    hue : str, optional
+        field by which to color points, None for no color, by default None
+    ax : matplotlib.axes.Axes, optional
+        existing axess to plot into, by default None
+    palette : str, optional
+        color palette passed to sns.scatterplot
+    chromosome : str, optional
+        single chromosome plot, by default None
+    start : int, optional
+        start of plotting region
+    end : int, optional
+        end of plotting region
+    squashy : bool, optional
+        compress y axis, by default False
+    rawy : bool, optional
+        raw data on y axis, by default False
+    **kwargs :
+        kwargs for sns.scatterplot
+
+    Returns
+    -------
+    matplotlib.axes.Axes
+        Axes used for plotting
+
+    Examples
+    -------
+
+    .. plot::
+        :context: close-figs
+
+        import scgenome
+        adata = scgenome.datasets.OV2295_HMMCopy_reduced()
+        scgenome.pl.plot_profile(adata[:, adata.var['gc'] > 0], 'gc')
+
+    """
+
+    if ax is None:
+        ax = plt.gca()
+
+    if 'linewidth' not in kwargs:
+        kwargs['linewidth'] = 0
+
+    if 's' not in kwargs:
+        kwargs['s'] = 5
+
+    if palette is None and hue is not None:
+        palette = cn_colors.color_reference
+
+    genome_axis_plot(
+        data,
+        sns.scatterplot,
+        ('start',),
+        x='start',
+        y=y,
+        hue=hue,
+        palette=palette,
+        ax=ax,
+        **kwargs)
+
+    setup_genome_xaxis_ticks(ax, chromosome=chromosome, start=start, end=end)
+
+    setup_genome_xaxis_lims(ax, chromosome=chromosome, start=start, end=end)
+
+    if squashy:
+        setup_squash_yaxis(ax)
+
+    ax.set_xlabel('chromosome')
+    ax.spines[['right', 'top']].set_visible(False)
+
+    return ax
 
 
 def plot_cn_profile(
@@ -170,10 +174,12 @@ def plot_cn_profile(
         value_layer_name=None,
         state_layer_name=None,
         ax=None,
-        max_cn=13,
+        palette=None,
         chromosome=None,
-        s=5,
+        start=None,
+        end=None,
         squashy=False,
+        **kwargs
 ):
     """Plot scatter points of copy number across the genome or a chromosome.
 
@@ -187,18 +193,27 @@ def plot_cn_profile(
         layer with values for y axis, None for X, by default None
     state_layer_name : str, optional
         layer with states for colors, None for no color by state, by default None
-    ax : [type], optional
-        existing axis to plot into, by default None
-    max_cn : int, optional
-        max copy number for y axis, by default 13
-    chromosome : [type], optional
+    ax : matplotlib.axes.Axes, optional
+        existing axess to plot into, by default None
+    palette : str, optional
+        color palette passed to sns.scatterplot
+    chromosome : str, optional
         single chromosome plot, by default None
-    s : int, optional
-        size of scatter points, by default 5
+    start : int, optional
+        start of plotting region
+    end : int, optional
+        end of plotting region
     squashy : bool, optional
         compress y axis, by default False
     rawy : bool, optional
         raw data on y axis, by default False
+    **kwargs :
+        kwargs for sns.scatterplot
+
+    Returns
+    -------
+    matplotlib.axes.Axes
+        Axes used for plotting
 
     Examples
     -------
@@ -210,118 +225,25 @@ def plot_cn_profile(
         adata = scgenome.datasets.OV2295_HMMCopy_reduced()
         scgenome.pl.plot_cn_profile(adata, 'SA922-A90554B-R27-C43', value_layer_name='copy', state_layer_name='state')
 
-    TODO: missing return
     """
-    cn_data = adata.var.copy()
 
-    if value_layer_name is not None:
-        cn_value = adata[[obs_id], :].layers[value_layer_name]
-    else:
-        cn_value = adata[[obs_id], :].X
-
-    if issparse(cn_value):
-        cn_data['value'] = cn_value.toarray()[0]
-    else:
-        cn_data['value'] = np.array(cn_value)[0]
-
-    # TODO: what if state is sparse
-    cn_field_name = None
-    if state_layer_name is not None:
-        cn_data['state'] = np.array(adata[[obs_id], :].layers[state_layer_name][0])
-        cn_field_name = 'state'
-
-    cn_data = cn_data.dropna(subset=['value'])
-
-    def scatterplot(data, y=None, ax=None, **kwargs):
-        sns.scatterplot(x='start', y=y, data=data, ax=ax, linewidth=0, legend=False, **kwargs)
-
-    gwp = GenomeWidePlot(
-        cn_data,
-        scatterplot,
-        hue=cn_field_name,
-        ax=ax,
-        s=s,
-        y='value',
-        palette=cn_colors.color_reference
-    )
-
-    if chromosome is not None:
-        gwp.view_chromosome(chromosome)
-
-    if squashy:
-        gwp.squash_y_axis()
-    else:
-        gwp.set_ylims(0, max_cn)
-
-    return gwp
-
-
-def plot_var_profile(
+    cn_data = get_obs_data(
         adata,
-        value_field_name,
-        cn_field_name=None,
-        ax=None,
-        chromosome=None,
-        s=5,
-        max_cn=12,
-        squashy=False
-):
-    """Plot scatter points of copy number across the genome or a chromosome.
+        obs_id,
+        ['chr', 'start'],
+        {value_layer_name, state_layer_name})
 
-    Parameters
-    ----------
-    adata : AnnData
-        copy number data
-    value_field_name : str, optional
-        var field with values for y axis, None for X, by default None
-    cn_field_name : str, optional
-        var field with states for colors, None for no color by state, by default None
-    ax : [type], optional
-        existing axis to plot into, by default None
-    max_cn : int, optional
-        max copy number for y axis, by default 13
-    chromosome : [type], optional
-        single chromosome plot, by default None
-    s : int, optional
-        size of scatter points, by default 5
-    squashy : bool, optional
-        compress y axis, by default False
-    rawy : bool, optional
-        raw data on y axis, by default False
+    if value_layer_name is None:
+        value_layer_name = '_X'
 
-    Examples
-    -------
-
-    .. plot::
-        :context: close-figs
-
-        import scgenome
-        adata = scgenome.datasets.OV2295_HMMCopy_reduced()
-        scgenome.pl.plot_var_profile(adata[:, adata.var['gc'] > 0], 'gc', rawy=True)
-
-    TODO: missing return
-    """
-
-    def scatterplot(data, y=None, ax=None, **kwargs):
-        sns.scatterplot(x='start', y=y, data=data, ax=ax, linewidth=0, **kwargs)
-
-    data = adata.var.copy()
-
-    gwp = GenomeWidePlot(
-        data,
-        scatterplot,
-        hue=cn_field_name,
+    return plot_profile(
+        cn_data,
+        y=value_layer_name,
+        hue=state_layer_name,
         ax=ax,
-        s=s,
-        y=value_field_name,
-    )
-
-    if chromosome is not None:
-        gwp.view_chromosome(chromosome)
-
-    if squashy:
-        gwp.squash_y_axis()
-    else:
-        gwp.set_ylims(0, max_cn)
-
-    return gwp
+        palette=palette,
+        chromosome=chromosome,
+        start=start,
+        end=end,
+        squashy=squashy,
+        **kwargs)
