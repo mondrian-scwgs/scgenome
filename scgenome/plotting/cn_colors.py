@@ -2,22 +2,13 @@ import numpy as np
 
 from matplotlib.patches import Patch
 from numpy import ndarray
+from collections import defaultdict
 
-
-color_reference = {
-    0:'#3182BD',
-    1:'#9ECAE1',
-    2:'#CCCCCC',
-    3:'#FDCC8A',
-    4:'#FC8D59',
-    5:'#E34A33',
-    6:'#B30000',
-    7:'#980043',
-    8:'#DD1C77',
-    9:'#DF65B0',
-    10:'#C994C7',
-    11:'#D4B9DA',
-}
+color_reference = defaultdict(
+    lambda: '#D4B9DA',
+    {0: '#3182BD', 1: '#9ECAE1', 2: '#CCCCCC', 3: '#FDCC8A', 4: '#FC8D59', 5: '#E34A33',
+     6: '#B30000', 7: '#980043', 8: '#DD1C77', 9: '#DF65B0', 10: '#C994C7', 11: '#D4B9DA'}
+)
 
 
 def hex_to_rgb(h):
