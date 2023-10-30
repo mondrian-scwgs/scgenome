@@ -104,7 +104,9 @@ def aggregate_genes(
     intersect = pd.merge(intersect_1.as_df(), intersect_2.as_df())
     intersect['segment_width'] = intersect['End'] - intersect['Start']
 
-    X = _segment_width_weighted_mean_matrix(adata.to_df(), intersect)
+    X = None
+    if adata.X is not None:
+        X = _segment_width_weighted_mean_matrix(adata.to_df(), intersect)
 
     layer_data = {}
     for layer_name in agg_layers:
