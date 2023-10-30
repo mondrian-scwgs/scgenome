@@ -192,7 +192,7 @@ cyto_band_giemsa_stain_colors = {
 }
 
 
-def _plot_categorical_annotation(values, ax, ax_legend, title, horizontal=False, cmap_name=None, colors=None):
+def _plot_categorical_annotation(values, ax, ax_legend=None, title='', horizontal=False, cmap_name=None, colors=None):
     level_colors, value_colors = map_catagorigal_colors(values, level_colors=colors, cmap_name=cmap_name)
 
     im = ax.imshow(value_colors, aspect='auto', interpolation='none')
@@ -203,10 +203,14 @@ def _plot_categorical_annotation(values, ax, ax_legend, title, horizontal=False,
         levels.append(s)
         patches.append(Patch(facecolor=h, edgecolor=h))
     ncol = min(3, int(len(levels)**(1/2)))
-    legend = ax_legend.legend(patches, levels, ncol=ncol,
-        frameon=True, loc=2, bbox_to_anchor=(0., 1.),
-        facecolor='white', edgecolor='white', fontsize='4',
-        title=title, title_fontsize='6')
+
+    if ax_legend is not None:
+        legend = ax_legend.legend(patches, levels, ncol=ncol,
+            frameon=True, loc=2, bbox_to_anchor=(0., 1.),
+            facecolor='white', edgecolor='white', fontsize='4',
+            title=title, title_fontsize='6')
+    else:
+        legend = None
 
     ax.grid(False)
     if horizontal:
