@@ -40,25 +40,33 @@ def setup_genome_xaxis_lims(ax, chromosome=None, start=None, end=None):
     ax.set_xlim((plot_start-0.5, plot_end+0.5))
 
 
-def setup_genome_xaxis_ticks(ax, chromosome=None, start=None, end=None):
+def setup_genome_xaxis_ticks(ax, chromosome=None, start=None, end=None, major_spacing=2e7, minor_spacing=1e6):
     if chromosome is not None:
+        if major_spacing is None:
+            major_spacing = 2e7
+
+        if minor_spacing is None:
+            minor_spacing = 1e6
+
         chromosome_length = refgenome.info.chromosome_info.set_index('chr').loc[
             chromosome, 'chromosome_length']
         chromosome_start = refgenome.info.chromosome_info.set_index('chr').loc[chromosome, 'chromosome_start']
         chromosome_end = refgenome.info.chromosome_info.set_index('chr').loc[chromosome, 'chromosome_end']
-        xticks = np.arange(0, chromosome_length, 2e7)
+
+        xticks = np.arange(0, chromosome_length, major_spacing)
         xticklabels = ['{0:d}M'.format(int(x / 1e6)) for x in xticks]
-        xminorticks = np.arange(0, chromosome_length, 1e6)
+        xminorticks = np.arange(0, chromosome_length, minor_spacing)
+
         ax.set_xticks(xticks + chromosome_start)
         ax.set_xticklabels(xticklabels)
+
         ax.xaxis.set_minor_locator(matplotlib.ticker.FixedLocator(xminorticks + chromosome_start))
         ax.xaxis.set_minor_formatter(matplotlib.ticker.NullFormatter())
 
     else:
         ax.set_xticks([0] + refgenome.info.chromosome_info['chromosome_end'].values.tolist())
         ax.set_xticklabels([])
-        ax.xaxis.tick_bottom()
-        ax.yaxis.tick_left()
+
         ax.xaxis.set_minor_locator(
             matplotlib.ticker.FixedLocator(refgenome.info.chromosome_info['chromosome_mid'])
         )
@@ -85,6 +93,8 @@ def plot_profile(
         start=None,
         end=None,
         squashy=False,
+        tick_major_spacing=None,
+        tick_minor_spacing=None,
         **kwargs
 ):
     """Plot scatter points of copy number across the genome or a chromosome.
@@ -112,6 +122,10 @@ def plot_profile(
         compress y axis, by default False
     rawy : bool, optional
         raw data on y axis, by default False
+    tick_major_spacing : int, optional
+        major tick spacing, by default 
+    tick_minor_spacing : int, optional
+        minor tick spacing, by default 1e6
     **kwargs :
         kwargs for sns.scatterplot
 
@@ -155,15 +169,34 @@ def plot_profile(
         ax=ax,
         **kwargs)
 
-    setup_genome_xaxis_ticks(ax, chromosome=chromosome, start=start, end=end)
+    setup_genome_xaxis_ticks(
+        ax,
+        chromosome=chromosome,
+        start=start,
+        end=end,
+        major_spacing=tick_major_spacing,
+        minor_spacing=tick_minor_spacing,
+    )
 
-    setup_genome_xaxis_lims(ax, chromosome=chromosome, start=start, end=end)
+    setup_genome_xaxis_lims(
+        ax,
+        chromosome=chromosome,
+        start=start,
+        end=end,
+    )
 
     if squashy:
         setup_squash_yaxis(ax)
 
-    ax.set_xlabel('chromosome')
+    if chromosome is not None:
+        ax.set_xlabel(f'Chromosome {chromosome}')
+
+    else:
+        ax.set_xlabel('Chromosome')
+
     ax.spines[['right', 'top']].set_visible(False)
+    ax.xaxis.tick_bottom()
+    ax.yaxis.tick_left()
 
     return ax
 
@@ -179,6 +212,8 @@ def plot_cn_profile(
         start=None,
         end=None,
         squashy=False,
+        tick_major_spacing=None,
+        tick_minor_spacing=None,
         **kwargs
 ):
     """Plot scatter points of copy number across the genome or a chromosome.
@@ -207,6 +242,10 @@ def plot_cn_profile(
         compress y axis, by default False
     rawy : bool, optional
         raw data on y axis, by default False
+    tick_major_spacing : int, optional
+        major tick spacing, by default 
+    tick_minor_spacing : int, optional
+        minor tick spacing, by default 1e6
     **kwargs :
         kwargs for sns.scatterplot
 
@@ -227,14 +266,19 @@ def plot_cn_profile(
 
     """
 
+    if value_layer_name is None:
+        value_layer_name = '_X'
+
+    layers = {value_layer_name}
+
+    if state_layer_name is not None:
+        layers.add(state_layer_name)
+
     cn_data = get_obs_data(
         adata,
         obs_id,
         ['chr', 'start'],
-        {value_layer_name, state_layer_name})
-
-    if value_layer_name is None:
-        value_layer_name = '_X'
+        layer_names=layers)
 
     return plot_profile(
         cn_data,
@@ -246,4 +290,6 @@ def plot_cn_profile(
         start=start,
         end=end,
         squashy=squashy,
+        tick_major_spacing=tick_major_spacing,
+        tick_minor_spacing=tick_minor_spacing,
         **kwargs)
