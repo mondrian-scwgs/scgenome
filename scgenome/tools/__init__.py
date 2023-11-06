@@ -7,4 +7,4 @@ from .genes import read_ensemble_genes_gtf, aggregate_genes
 from .concat import ad_concat_cells
 from .phylo import prune_leaves, align_cn_tree
 from .ranges import create_bins, rebin, rebin_regular, weighted_mean, bin_width_weighted_mean
-from .getters import get_obs_data
+from .getters import get_obs_data, get_var_data
