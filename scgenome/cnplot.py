@@ -7,10 +7,11 @@ import pandas as pd
 import scipy
 import scipy.cluster.hierarchy as sch
 import scipy.spatial.distance as dst
-import seaborn
+import seaborn as sns
 from matplotlib.colors import ListedColormap
 from scgenome import refgenome
 from sklearn.decomposition import PCA
+from scgenome.plotting.cn import plot_profile
 
 
 def hex_to_rgb(h):
@@ -54,102 +55,6 @@ def _secondary_clustering(data):
     return ordering
 
 
-def plot_cell_cn_profile(ax, cn_data, value_field_name, cn_field_name=None, max_cn=13, chromosome=None, s=5,
-                         squashy=False, rawy=False, cmap=None, label=None):
-    """ Plot copy number profile on a genome axis
-
-    Args:
-        ax: matplotlib axis
-        cn_data: copy number table
-        value_field_name: column in cn_data to use for the y axis value
-    
-    Kwargs:
-        cn_field_name: state column to color scatter points
-        max_cn: max copy number for y axis
-        chromosome: single chromosome plot
-        s: size of scatter points
-        squashy: compress y axis
-        rawy: raw data on y axis
-        label: label for data to pass to scatter
-
-    The cn_data table should have the following columns (in addition to value_field_name and
-    optionally cn_field_name):
-        - chr
-        - start
-        - end
-    """
-    chromosome_info = refgenome.info.chromosome_info[['chr', 'chromosome_start', 'chromosome_end']].copy()
-    chromosome_info['chr'] = pd.Categorical(chromosome_info['chr'], categories=cn_data['chr'].cat.categories)
-
-    plot_data = cn_data.merge(chromosome_info)
-    plot_data = plot_data[plot_data['chr'].isin(refgenome.info.chromosomes)]
-    plot_data['start'] = plot_data['start'] + plot_data['chromosome_start']
-    plot_data['end'] = plot_data['end'] + plot_data['chromosome_start']
-
-    squash_coeff = 0.15
-    squash_f = lambda a: np.tanh(squash_coeff * a)
-    if squashy:
-        plot_data[value_field_name] = squash_f(plot_data[value_field_name])
-
-    if cn_field_name is not None:
-        if cmap is not None:
-            ax.scatter(
-                plot_data['start'], plot_data[value_field_name],
-                c=plot_data[cn_field_name], s=s,
-                cmap=cmap, label=label,
-            )
-        else:
-            ax.scatter(
-                plot_data['start'], plot_data[value_field_name],
-                c=plot_data[cn_field_name], s=s,
-                cmap=get_cn_cmap(plot_data[cn_field_name].astype(int).values),
-                label=label,
-            )
-    else:
-        ax.scatter(
-            plot_data['start'], plot_data[value_field_name], s=s, label=label,
-        )
-
-    if chromosome is not None:
-        chromosome_length = refgenome.info.chromosome_info.set_index('chr').loc[chromosome, 'chromosome_length']
-        chromosome_start = refgenome.info.chromosome_info.set_index('chr').loc[chromosome, 'chromosome_start']
-        chromosome_end = refgenome.info.chromosome_info.set_index('chr').loc[chromosome, 'chromosome_end']
-        xticks = np.arange(0, chromosome_length, 2e7)
-        xticklabels = ['{0:d}M'.format(int(x / 1e6)) for x in xticks]
-        xminorticks = np.arange(0, chromosome_length, 1e6)
-        ax.set_xlabel(f'chromosome {chromosome}')
-        ax.set_xticks(xticks + chromosome_start)
-        ax.set_xticklabels(xticklabels)
-        ax.xaxis.set_minor_locator(matplotlib.ticker.FixedLocator(xminorticks + chromosome_start))
-        ax.xaxis.set_minor_formatter(matplotlib.ticker.NullFormatter())
-        ax.set_xlim((chromosome_start, chromosome_end))
-
-    else:
-        ax.set_xlim((-0.5, refgenome.info.chromosome_info['chromosome_end'].max()))
-        ax.set_xlabel('chromosome')
-        ax.set_xticks([0] + list(refgenome.info.chromosome_info['chromosome_end'].values))
-        ax.set_xticklabels([])
-        ax.xaxis.tick_bottom()
-        ax.yaxis.tick_left()
-        ax.xaxis.set_minor_locator(matplotlib.ticker.FixedLocator(refgenome.info.chromosome_info['chromosome_mid']))
-        ax.xaxis.set_minor_formatter(matplotlib.ticker.FixedFormatter(refgenome.info.plot_chromosomes))
-
-    if squashy and not rawy:
-        yticks = np.array([0, 2, 4, 7, 20])
-        yticks_squashed = squash_f(yticks)
-        ytick_labels = [str(a) for a in yticks]
-        ax.set_yticks(yticks_squashed)
-        ax.set_yticklabels(ytick_labels)
-        ax.set_ylim((-0.01, 1.01))
-        ax.spines['left'].set_bounds(0, 1)
-    elif not rawy:
-        ax.set_ylim((-0.05 * max_cn, max_cn))
-        ax.set_yticks(range(0, int(max_cn) + 1))
-        ax.spines['left'].set_bounds(0, max_cn)
-
-    return chromosome_info
-
-
 def plot_breakends(ax, breakends, lw=0.5):
     """ Plot breakpoint flags and arcs on a genome axis
 
@@ -187,7 +92,7 @@ def plot_breakends(ax, breakends, lw=0.5):
 
     prediction_ids = list(plot_data['prediction_id'].unique())
     random.shuffle(prediction_ids)
-    color_palette = seaborn.color_palette('hls', len(prediction_ids))
+    color_palette = sns.color_palette('hls', len(prediction_ids))
     prediction_colors = dict(zip(prediction_ids, color_palette))
 
     for idx in plot_data.index:
@@ -248,8 +153,12 @@ def plot_pca_components(cn_data, n_components=4, plots_prefix=None):
     for idx in range(4):
         ax = fig.add_subplot(n_components, 1, idx + 1)
         plot_data = components.iloc[idx].T.rename('component').reset_index()
-        plot_cell_cn_profile(
-            ax, plot_data, 'component', rawy=True)
+        plot_profile(
+            plot_data,
+            ax=ax,
+            s=5,
+            y='component',
+        )
         ax.set_ylabel(f'PCA {idx+1}')
 
     if plots_prefix is not None:
