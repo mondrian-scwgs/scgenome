@@ -54,7 +54,6 @@ Clustering
    :toctree: generated/
 
    tl.cluster_cells
-   tl.cluster_cells_kmeans
    tl.aggregate_clusters_hmmcopy
    tl.aggregate_clusters
    tl.sort_cells

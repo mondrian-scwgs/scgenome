@@ -13,6 +13,8 @@ jupyter:
     name: python3
 ---
 
+# Explore PCA
+
 ```python
 
 import scgenome

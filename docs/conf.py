@@ -95,7 +95,6 @@ html_context = {
 def setup(app):
     app.warningiserror = on_rtd
 
-
 # -- Options for other output formats ------------------------------------------
 
 htmlhelp_basename = f'{project}doc'
