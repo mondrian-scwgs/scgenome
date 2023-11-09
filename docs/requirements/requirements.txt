@@ -6,3 +6,4 @@ myst_parser
 sphinx_autodoc_typehints
 scanpydoc
 sphinx-rtd-theme
+sphinx-book-theme
