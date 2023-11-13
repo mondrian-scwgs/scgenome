@@ -11,5 +11,6 @@ Plotting examples:
    :hidden:
    :maxdepth: 3
 
-   notebooks/heatmap.ipynb
-   notebooks/cell_plotting.ipynb
+   notebooks/heatmap.md
+   notebooks/cell_plotting.md
+   notebooks/explore_pca.md

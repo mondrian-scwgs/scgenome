@@ -4,14 +4,15 @@ import scgenome.tools.getters
 
 
 def plot_gc_reads(adata, obs_id, **kwargs):
-    """ Plot scatter points of gc by read count.
+    """
+     Plot scatter points of gc by read count.
 
     Args:
         adata (anndata.AnnData): copy number
         obs_id (str): cell or clone to plot
     
     KwArgs:
-        **kwargs: passed to sns.scatterplot
+        kwargs: passed to sns.scatterplot
     """
 
     data = scgenome.tools.getters.get_obs_data(adata, obs_id, var_columns=['gc'], layer_names=[None])
