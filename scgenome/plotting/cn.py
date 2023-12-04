@@ -40,7 +40,10 @@ def setup_genome_xaxis_lims(ax, chromosome=None, start=None, end=None):
     ax.set_xlim((plot_start-0.5, plot_end+0.5))
 
 
-def setup_genome_xaxis_ticks(ax, chromosome=None, start=None, end=None, major_spacing=2e7, minor_spacing=1e6):
+def setup_genome_xaxis_ticks(ax, chromosome=None, start=None, end=None, major_spacing=2e7, minor_spacing=1e6, chromosome_names=None):
+    if chromosome_names is None:
+        chromosome_names = {}
+    
     if chromosome is not None:
         if major_spacing is None:
             major_spacing = 2e7
@@ -70,7 +73,7 @@ def setup_genome_xaxis_ticks(ax, chromosome=None, start=None, end=None, major_sp
         ax.xaxis.set_minor_locator(
             matplotlib.ticker.FixedLocator(refgenome.info.chromosome_info['chromosome_mid'])
         )
-        ax.xaxis.set_minor_formatter(matplotlib.ticker.FixedFormatter(refgenome.info.chromosomes))
+        ax.xaxis.set_minor_formatter(matplotlib.ticker.FixedFormatter([chromosome_names.get(c, c) for c in refgenome.info.chromosomes]))
 
 
 def setup_squash_yaxis(ax):
