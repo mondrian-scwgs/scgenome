@@ -8,6 +8,8 @@ from anndata import AnnData
 from pyranges import PyRanges
 from collections.abc import Iterable
 
+from .ranges import dataframe_to_pyranges, pyranges_to_dataframe
+
 
 def read_ensemble_genes_gtf(gtf_filename) -> PyRanges:
     """ Read an ensembl gtf and extract gene start end
@@ -92,11 +94,7 @@ def aggregate_genes(
         agg_var = set(adata.var.select_dtypes(include=np.number).columns.to_list()) - set(['chr', 'start', 'end'])
     agg_var = set(agg_var)
 
-    bins = pr.PyRanges(adata.var.reset_index().rename(columns={
-        'chr': 'Chromosome',
-        'start': 'Start',
-        'end': 'End',
-    })[['Chromosome', 'Start', 'End', 'bin']])
+    bins = dataframe_to_pyranges(adata.var.reset_index())
 
     intersect_1 = genes.intersect(bins)
     intersect_2 = bins.intersect(genes)
@@ -114,7 +112,7 @@ def aggregate_genes(
 
     var = _segment_width_weighted_mean_var(adata.var[agg_var], intersect)
 
-    gene_data = genes.as_df().drop_duplicates().set_index('gene_id')
+    gene_data = pyranges_to_dataframe(genes).set_index('gene_id')
     var = var.merge(gene_data, left_index=True, right_index=True, how='left')
 
     adata = ad.AnnData(
