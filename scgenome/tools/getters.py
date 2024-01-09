@@ -35,12 +35,14 @@ def get_obs_data(
 
     for layer_name in layer_names:
         assert layer_name not in data, f'layer {layer_name} also in .var'
-        layer_data = adata[obs_id].to_df(layer_name).T
-        assert len(layer_data.columns) == 1
-        if layer_name is not None:
-            layer_data.columns = [layer_name]
-        else:
+        if layer_name is None or layer_name == '_X':
+            layer_data = adata[obs_id].to_df().T
+            assert len(layer_data.columns) == 1
             layer_data.columns = ['_X']
+        else:
+            layer_data = adata[obs_id].to_df(layer_name).T
+            assert len(layer_data.columns) == 1
+            layer_data.columns = [layer_name]
         data = data.merge(layer_data, left_index=True, right_index=True, how='left')
     
     return data
