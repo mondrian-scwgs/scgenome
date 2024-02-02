@@ -27,7 +27,8 @@ def plot_cell_cn_matrix(
         vmin=None,
         vmax=None,
         cmap=None,
-        show_cell_ids=False):
+        show_cell_ids=False,
+        style='black'):
     """ Plot a copy number matrix
 
     Parameters
@@ -50,6 +51,8 @@ def plot_cell_cn_matrix(
         matplotlib colormap name, only used if raw=True
     show_cell_ids : bool, optional
         show cell ids on heatmap axis, by default False
+    style : str, optional, default 'black'
+        style for spines and chromosome dividing lines and other plot elements
 
     Returns
     -------
@@ -130,8 +133,14 @@ def plot_cell_cn_matrix(
         ax.set(yticks=[])
         ax.set(yticklabels=[])
 
-    for val in chrom_boundaries[:-1]:
-        ax.axvline(x=val, linewidth=0.5, color='black', zorder=100)
+    if style == 'black':
+        for val in chrom_boundaries[1:-1]:
+            ax.axvline(x=val, linewidth=0.5, color='black', zorder=100)
+        ax.spines[:].set_visible(True)
+    elif style == 'white':
+        for val in chrom_boundaries[1:-1]:
+            ax.axvline(x=val, linewidth=0.5, color='white', zorder=100)
+        ax.spines[:].set_visible(False)
 
     return {
         'ax': ax,
@@ -284,7 +293,8 @@ def plot_cell_cn_matrix_fig(
         cmap=None,
         max_cn=13,
         show_cell_ids=False,
-        show_subsets=False):
+        show_subsets=False,
+        style='black'):
     """ Plot a copy number matrix
 
     Parameters
@@ -313,6 +323,8 @@ def plot_cell_cn_matrix_fig(
         show cell ids on heatmap axis, by default False
     show_subsets : bool, optional
         show subset/superset categoricals to allow identification of cell sets
+    style : str, optional, default 'black'
+        style for spines and chromosome dividing lines and other plot elements
 
     Returns
     -------
@@ -437,7 +449,8 @@ def plot_cell_cn_matrix_fig(
         adata, layer_name=layer_name,
         cell_order_fields=cell_order_fields,
         ax=heatmap_ax, raw=raw, vmin=vmin, vmax=vmax, cmap=cmap,
-        max_cn=max_cn, show_cell_ids=show_cell_ids)
+        max_cn=max_cn, show_cell_ids=show_cell_ids,
+        style=style)
 
     adata = g['adata']
     im = g['im']
