@@ -11,45 +11,10 @@ from pyranges import PyRanges
 from typing import Dict, Sequence
 from pandas import DataFrame
 
-
-def read_dlp_hmmcopy(alignment_results_dir, hmmcopy_results_dir, annotation_results_dir, sample_ids=None, additional_hmmcopy_reads_cols=None) -> AnnData:
-    """ Read hmmcopy results from the DLP pipeline.
-
-    Parameters
-    ----------
-    alignment_results_dir : str
-        dlp pipeline alignment results directory
-    hmmcopy_results_dir : str
-        dlp pipeline hmmcopy results directory
-    annotation_results_dir : str
-        dlp pipeline annotation results directory
-    sample_ids : list
-        sample ids to load
-    additional_hmmcopy_reads_cols : list
-        per bin metrics to load
-
-    Returns
-    -------
-    AnnData
-        An instantiated AnnData Object.
-    """
+from ..utils import union_categories
 
 
-    results = scgenome.loaders.qc.load_qc_results(
-        alignment_results_dir,
-        hmmcopy_results_dir,
-        annotation_results_dir,
-        sample_ids=sample_ids,
-        additional_hmmcopy_reads_cols=additional_hmmcopy_reads_cols,
-    )
-
-    metrics_data = results['annotation_metrics']
-    cn_data = results['hmmcopy_reads']
-
-    return convert_dlp_hmmcopy(metrics_data, cn_data)
-
-
-def read_dlp_hmmcopy2(reads_filename, metrics_filename, sample_ids=None) -> AnnData:
+def read_dlp_hmmcopy(reads_filename, metrics_filename, sample_ids=None) -> AnnData:
     """ Read hmmcopy results from the DLP pipeline.
 
     Parameters
@@ -67,24 +32,12 @@ def read_dlp_hmmcopy2(reads_filename, metrics_filename, sample_ids=None) -> AnnD
         An instantiated AnnData Object.
     """
 
-    cn_data = csverve.read_csv(
-        reads_filename,
-        dtype={
-            'cell_id': 'category',
-            'sample_id': 'category',
-            'library_id': 'category',
-            'chr': 'category',
-        })
+    cn_data = csverve.read_csv(reads_filename)
+    metrics_data = csverve.read_csv(metrics_filename)
 
-    metrics_data = csverve.read_csv(
-        metrics_filename,
-        dtype={
-            'cell_id': 'category',
-            'sample_id': 'category',
-            'library_id': 'category',
-        })
+    assert cn_data['chr'].dtype.name == 'category'
 
-    scgenome.utils.union_categories([cn_data, metrics_data])
+    union_categories([cn_data, metrics_data])
 
     return convert_dlp_hmmcopy(metrics_data, cn_data)
 
@@ -199,7 +152,7 @@ def convert_dlp_hmmcopy(metrics_data: DataFrame, cn_data: DataFrame) -> AnnData:
     AnnData
         An instantiated AnnData Object.
     """
-    scgenome.utils.union_categories([cn_data, metrics_data])
+    union_categories([cn_data, metrics_data])
 
     return create_cn_anndata(
         cn_data[['cell_id', 'chr', 'start', 'end', 'reads', 'copy', 'state']],
