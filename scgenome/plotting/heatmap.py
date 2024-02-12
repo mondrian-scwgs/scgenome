@@ -4,6 +4,7 @@ import numpy as np
 import seaborn as sns
 import pandas as pd
 import Bio.Phylo
+import collections.abc
 
 from anndata import AnnData
 
@@ -149,7 +150,14 @@ def plot_cell_cn_matrix(
     }
 
 
-def map_catagorigal_colors(values, level_colors=None, cmap_name=None):
+def map_catagorigal_colors(values, cmap=None):
+    level_colors = None
+    cmap_name = None
+    if isinstance(cmap, str):
+        cmap_name = cmap
+    elif isinstance(cmap, collections.abc.Mapping):
+        level_colors = cmap
+
     levels = np.unique(values)
     n_levels = len(levels)
 
@@ -201,8 +209,8 @@ cyto_band_giemsa_stain_colors = {
 }
 
 
-def _plot_categorical_annotation(values, ax, ax_legend=None, title='', horizontal=False, cmap_name=None, colors=None):
-    level_colors, value_colors = map_catagorigal_colors(values, level_colors=colors, cmap_name=cmap_name)
+def _plot_categorical_annotation(values, ax, ax_legend=None, title='', horizontal=False, cmap=None):
+    level_colors, value_colors = map_catagorigal_colors(values, cmap=cmap)
 
     im = ax.imshow(value_colors, aspect='auto', interpolation='none')
 
@@ -259,9 +267,11 @@ def _plot_continuous_legend(ax_legend, im, title):
     return annotation_info
 
 
-def _plot_continuous_annotation(values, ax, ax_legend, title, horizontal=False):
+def _plot_continuous_annotation(values, ax, ax_legend, title, horizontal=False, cmap=None):
+    if cmap is None:
+        cmap = 'Reds'
 
-    im = ax.imshow(values, aspect='auto', interpolation='none', cmap='Reds')
+    im = ax.imshow(values, aspect='auto', interpolation='none', cmap=cmap)
 
     ax.grid(False)
     if horizontal:
@@ -285,7 +295,9 @@ def plot_cell_cn_matrix_fig(
         tree=None,
         cell_order_fields=None,
         annotation_fields=None,
+        annotation_cmap=None,
         var_annotation_fields=None,
+        var_annotation_cmap=None,
         fig=None,
         raw=False,
         vmin=None,
@@ -355,9 +367,15 @@ def plot_cell_cn_matrix_fig(
 
     if annotation_fields is None:
         annotation_fields = []
+    
+    if annotation_cmap is None:
+        annotation_cmap = {}
 
     if var_annotation_fields is None:
         var_annotation_fields = []
+
+    if var_annotation_cmap is None:
+        var_annotation_cmap = {}
 
     if tree is not None:
         if cell_order_fields is not None and len(cell_order_fields) > 0:
@@ -428,6 +446,7 @@ def plot_cell_cn_matrix_fig(
         ax.set_alpha(0.0)
         ax.patch.set_alpha(0.0)
 
+    tree_ax = None
     if tree is not None:
         # Plot phylogenetic tree
         tree_ax = axes[heatmap_ax_row_idx, tree_ax_idx]
@@ -475,28 +494,32 @@ def plot_cell_cn_matrix_fig(
     for ax, ax_legend, annotation_field in zip(axes[heatmap_ax_row_idx, heatmap_ax_col_idx+2:], axes_legends[1:], annotation_fields):
         if adata.obs[annotation_field].dtype.name in ('category', 'object', 'bool'):
             values = adata.obs[[annotation_field]].values
-            annotation_info[annotation_field] = _plot_categorical_annotation(values, ax, ax_legend, annotation_field)
+            annotation_info[annotation_field] = _plot_categorical_annotation(values, ax, ax_legend, annotation_field, cmap=annotation_cmap.get(annotation_field))
 
         else:
             values = adata.obs[[annotation_field]].values
-            annotation_info[annotation_field] = _plot_continuous_annotation(values, ax, ax_legend, annotation_field)
+            annotation_info[annotation_field] = _plot_continuous_annotation(values, ax, ax_legend, annotation_field, cmap=annotation_cmap.get(annotation_field))
+        
+        if style == 'white':
+            ax.spines[:].set_visible(False)
 
     for ax, ax_legend, annotation_field in zip(axes[:, heatmap_ax_col_idx], axes_legends[1+len(annotation_fields):], var_annotation_fields):
-        if annotation_field == 'cyto_band_giemsa_stain': # Special handling for cyto band
+        if adata.var[annotation_field].dtype.name in ('category', 'object', 'bool'):
             values = adata.var[[annotation_field]].copy().values.T
-            annotation_info[annotation_field] = _plot_categorical_annotation(values, ax, ax_legend, annotation_field, horizontal=True, colors=cyto_band_giemsa_stain_colors)
-
-        elif adata.var[annotation_field].dtype.name in ('category', 'object', 'bool'):
-            values = adata.var[[annotation_field]].copy().values.T
-            annotation_info[annotation_field] = _plot_categorical_annotation(values, ax, ax_legend, annotation_field, horizontal=True)
+            annotation_info[annotation_field] = _plot_categorical_annotation(values, ax, ax_legend, annotation_field, horizontal=True, cmap=var_annotation_cmap.get(annotation_field))
 
         else:
             values = adata.var[[annotation_field]].copy().values.T
-            annotation_info[annotation_field] = _plot_continuous_annotation(values, ax, ax_legend, annotation_field, horizontal=True)
+            annotation_info[annotation_field] = _plot_continuous_annotation(values, ax, ax_legend, annotation_field, horizontal=True, cmap=var_annotation_cmap.get(annotation_field))
+
+        if style == 'white':
+            ax.spines[:].set_visible(False)
 
     return {
         'fig': fig,
         'axes': axes,
+        'tree_ax': tree_ax,
+        'heatmap_ax': heatmap_ax,
         'adata': adata,
         'im': im,
         'legend_info': legend_info,
