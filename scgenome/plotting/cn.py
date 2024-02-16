@@ -85,6 +85,10 @@ def setup_squash_yaxis(ax):
     yticks = np.array([0, 2, 4, 7, 20])
     ax.set_yticks(yticks)
 
+    # Matplotlib will set problematic ylim if there are large y values
+    ylim = ax.get_ylim()
+    ax.set_ylim(-0.25, ylim[1])
+ 
 
 def plot_profile(
         data: DataFrame,
