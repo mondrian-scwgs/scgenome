@@ -88,11 +88,11 @@ def aggregate_genes(
 
     if agg_layers is None:
         agg_layers = adata.layers.keys()
-    agg_layers = set(agg_layers)
+    agg_layers = list(set(agg_layers))
 
     if agg_var is None:
         agg_var = set(adata.var.select_dtypes(include=np.number).columns.to_list()) - set(['chr', 'start', 'end'])
-    agg_var = set(agg_var)
+    agg_var = list(set(agg_var))
 
     bins = dataframe_to_pyranges(adata.var.reset_index())
 
