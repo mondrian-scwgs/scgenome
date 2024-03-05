@@ -231,9 +231,11 @@ def rebin(adata: AnnData, target_bins: DataFrame, outer_join: bool=False, agg_X=
     if agg_X is not None:
         X = rebin_agg_layer(adata, intersect, None, agg_X)
         X = X.reindex(columns=var.index)
+        X_dtype = X.values.dtype
 
     else:
         X = None
+        X_dtype = None
 
     layer_data = {}
     for layer_name in agg_layers:
@@ -242,7 +244,7 @@ def rebin(adata: AnnData, target_bins: DataFrame, outer_join: bool=False, agg_X=
 
     adata = ad.AnnData(
         X,
-        dtype=X.values.dtype,
+        dtype=X_dtype,
         obs=adata.obs,
         var=var,
         layers=layer_data,
