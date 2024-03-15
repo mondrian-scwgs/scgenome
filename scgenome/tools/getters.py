@@ -31,7 +31,7 @@ def get_obs_data(
         data = data[var_columns]
 
     if layer_names is None:
-        layer_names = adata.layers.keys()
+        layer_names = list(adata.layers.keys()) + ['_X']
 
     for layer_name in layer_names:
         assert layer_name not in data, f'layer {layer_name} also in .var'
