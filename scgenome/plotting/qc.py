@@ -15,7 +15,7 @@ def plot_gc_reads(adata, obs_id, **kwargs):
         kwargs: passed to sns.scatterplot
     """
 
-    data = scgenome.tools.getters.get_obs_data(adata, obs_id, var_columns=['gc'], layer_names=[None])
+    data = scgenome.tools.getters.get_obs_data(adata, obs_id, var_columns=['gc'])
     data = data.rename(columns={'_X': 'reads'})
     data = data[data['gc'] > 0]
 
