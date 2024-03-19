@@ -284,14 +284,17 @@ def read_medicc2_cn(cn_profiles_filename, allele_specific: bool = False) -> AnnD
         cn_profiles_filename,
         sep='\t',
         dtype={
+            'chr': 'category',
             'chrom': 'category',
-            'sample_id': 'category'
-    })
+            'sample_id': 'category',
+        },
+        low_memory=False,
+    )
 
-    cn_data = cn_data.rename(columns={
-        'sample_id': 'cell_id',
-        'chrom': 'chr',
-    })
+    cn_data = cn_data.rename(columns={'sample_id': 'cell_id'})
+
+    if 'chr' not in cn_data and 'chrom' in cn_data:
+        cn_data = cn_data.rename(columns={'chrom': 'chr'})
 
     if allele_specific:
         cn_data['state'] = cn_data['cn_a'] + cn_data['cn_b']
