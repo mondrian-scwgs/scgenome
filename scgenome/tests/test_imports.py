@@ -15,7 +15,7 @@ def test_imports():
     import scgenome.tools.getters
 
     print(scgenome.pl.plot_cn_profile)
-    print(scgenome.pl.plot_var_profile)
+    print(scgenome.pl.plot_profile)
     print(scgenome.pl.plot_cell_cn_matrix)
     print(scgenome.pl.plot_cell_cn_matrix_fig)
     print(scgenome.pl.cn_legend)
