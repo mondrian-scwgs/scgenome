@@ -35,7 +35,8 @@ def read_dlp_hmmcopy(reads_filename, metrics_filename, sample_ids=None) -> AnnDa
     cn_data = csverve.read_csv(reads_filename)
     metrics_data = csverve.read_csv(metrics_filename)
 
-    assert cn_data['chr'].dtype.name == 'category'
+    if cn_data['chr'].dtype.name != 'category':
+        cn_data['chr'] = cn_data['chr'].astype(str).astype('category')
 
     union_categories([cn_data, metrics_data])
 
