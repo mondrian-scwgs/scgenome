@@ -25,16 +25,22 @@ def get_obs_data(
     DataFrame
         dataframe for an observation
     """
-    data = adata.var
+    if var_columns is not None and layer_names is not None and set(var_columns).intersection(layer_names):
+        raise ValueError('var_columns and layer_names cannot have overlapping columns')
 
-    if var_columns is not None:
-        data = data[var_columns]
+    elif var_columns is None and layer_names is not None:
+        var_columns = list(set(adata.var.columns) - set(layer_names))
 
-    if layer_names is None:
+    elif layer_names is None and var_columns is not None:
+        layer_names = list(set(adata.layers.keys()) - set(var_columns)) + ['_X']
+
+    elif var_columns is None and layer_names is None:
+        var_columns = adata.var.columns
         layer_names = list(adata.layers.keys()) + ['_X']
 
+    data = adata.var[var_columns]
+
     for layer_name in layer_names:
-        assert layer_name not in data, f'layer {layer_name} also in .var'
         if layer_name is None or layer_name == '_X':
             layer_data = adata[obs_id].to_df().T
             assert len(layer_data.columns) == 1
@@ -43,7 +49,8 @@ def get_obs_data(
             layer_data = adata[obs_id].to_df(layer_name).T
             assert len(layer_data.columns) == 1
             layer_data.columns = [layer_name]
-        data = data.merge(layer_data, left_index=True, right_index=True, how='left')
+
+        data = data.merge(layer_data, left_index=True, right_index=True, how='left', suffixes=('', '_layer'))
     
     return data
 
