@@ -46,7 +46,7 @@ def load_annotation_results(
 def process_annotation_file(filepath):
     data = CsverveInput(filepath).read_csv()
 
-    data['sample_id'] = [a.split('-')[-4] for a in data['cell_id']]
+    data['sample_id'] = data.query('~is_control')['sample_id'].unique()[0]
     data['library_id'] = [a.split('-')[-3] for a in data['cell_id']]
 
     for col in _categorical_cols:

@@ -53,7 +53,7 @@ def process_alignment_data(filepath):
 
     data.query(f"cell_id != 'reference'", inplace=True)
 
-    data['sample_id'] = [a.split('-')[-4] for a in data['cell_id']]
+    data['sample_id'] = data.query('~is_control')['sample_id'].unique()[0]
     data['library_id'] = [a.split('-')[-3] for a in data['cell_id']]
 
     for col in _categorical_cols:
