@@ -212,9 +212,8 @@ def rebin(adata: AnnData, target_bins: DataFrame, outer_join: bool=False, agg_X=
         target_bins['chr'].astype(str) + ':' +
         target_bins['start'].astype(str) + '-' +
         target_bins['end'].astype(str))
-    target_bins = target_bins[['chr', 'start', 'end', 'target_bin']]
 
-    intersect = intersect_regions(bins, target_bins)
+    intersect = intersect_regions(bins, target_bins[['chr', 'start', 'end', 'target_bin']])
     intersect['width'] = intersect['end'] - intersect['start'] + 1
 
     if agg_var is not None:
