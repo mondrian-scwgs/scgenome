@@ -11,6 +11,7 @@ import scgenome.refgenome
 
 
 
+
 def dataframe_to_pyranges(data: DataFrame) -> PyRanges:
     """ Convert dataframe with chr, start, end to pyranges object
 
@@ -153,6 +154,10 @@ def rebin_agg_layer(adata: AnnData, intersect: DataFrame, layer_name: str, agg_f
     return data.T
 
 
+class NoIntersectionError(Exception):
+    pass
+
+
 def intersect_regions(a: DataFrame, b: DataFrame) -> DataFrame:
     """ Compute intersection between two sets of regions
 
@@ -173,6 +178,9 @@ def intersect_regions(a: DataFrame, b: DataFrame) -> DataFrame:
 
     intersect_1 = a.intersect(b)
     intersect_2 = b.intersect(a)
+
+    if intersect_1.empty or intersect_2.empty:
+        raise NoIntersectionError()
 
     intersect = pd.merge(
         scgenome.tools.ranges.pyranges_to_dataframe(intersect_1),
