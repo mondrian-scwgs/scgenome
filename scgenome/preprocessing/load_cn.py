@@ -336,10 +336,6 @@ def read_medicc2_cn(cn_profiles_filename, allele_specific: bool = False) -> AnnD
             .set_index(['cell_id'])
             .reindex(cn_matrix.loc['state'].index))
 
-    cell_data['is_root'] = cell_data.index == 'diploid'
-    cell_data['is_internal'] = cell_data.index.to_series().str.startswith('internal_')
-    cell_data['is_cell'] = (~cell_data['is_root']) & (~cell_data['is_internal'])
-
     X = cn_matrix.loc['state'].astype(np.float32)
 
     layers = {
