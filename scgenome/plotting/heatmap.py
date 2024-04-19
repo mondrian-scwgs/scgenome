@@ -116,13 +116,13 @@ def plot_cell_cn_matrix(
         im = ax.imshow(X, aspect='auto', cmap=cmap, interpolation='none', vmin=vmin, vmax=vmax)
 
     mat_chrom_idxs = chr_start[genome_ordering][:, 1]
-    chrom_boundaries = np.array([0] + list(np.where(mat_chrom_idxs[1:] != mat_chrom_idxs[:-1])[0]) + [mat_chrom_idxs.shape[0] - 1])
+    chrom_boundaries = np.array([0] + list(1 + np.where(mat_chrom_idxs[1:] != mat_chrom_idxs[:-1])[0]) + [mat_chrom_idxs.shape[0]])
     chrom_sizes = chrom_boundaries[1:] - chrom_boundaries[:-1]
     chrom_mids = chrom_boundaries[:-1] + chrom_sizes / 2
     ordered_mat_chrom_idxs = mat_chrom_idxs[np.where(np.array([1] + list(np.diff(mat_chrom_idxs))) != 0)]
     chrom_names = np.array(scgenome.refgenome.info.plot_chromosomes)[ordered_mat_chrom_idxs]
 
-    ax.set_xticks(chrom_mids)
+    ax.set_xticks(chrom_mids - 0.5)
     ax.set_xticklabels(chrom_names, fontsize='6')
     ax.set_xlabel('chromosome', fontsize=8)
 
@@ -136,11 +136,11 @@ def plot_cell_cn_matrix(
 
     if style == 'black':
         for val in chrom_boundaries[1:-1]:
-            ax.axvline(x=val, linewidth=0.5, color='black', zorder=100)
+            ax.axvline(x=val-0.5, linewidth=0.5, color='black', zorder=100)
         ax.spines[:].set_visible(True)
     elif style == 'white':
         for val in chrom_boundaries[1:-1]:
-            ax.axvline(x=val, linewidth=0.5, color='white', zorder=100)
+            ax.axvline(x=val-0.5, linewidth=0.5, color='white', zorder=100)
         ax.spines[:].set_visible(False)
 
     return {
