@@ -68,7 +68,6 @@ def pca_loadings(adata: AnnData, layer=None, n_components=None, random_state=100
             },
             'results': {
                 'n_components': pca.n_components_,
-                'n_features': pca.n_features_,
                 'n_samples': pca.n_samples_,
                 'noise_variance': pca.noise_variance_,
                 'n_features_in': pca.n_features_in_,
