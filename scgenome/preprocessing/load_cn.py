@@ -129,7 +129,7 @@ def create_cn_anndata(
 
     adata = ad.AnnData(
         X,
-        dtype=X.dtypes[0],
+        dtype=X.dtypes.iloc[0],
         obs=cell_data,
         var=bin_data,
         layers=layers,
