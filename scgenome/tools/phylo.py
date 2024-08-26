@@ -149,7 +149,7 @@ def align_cn_tree(tree, adata):
     anndata.AnnData
         Aligned AnnData object
     """
-    prune_leaves(tree, lambda a: a.name not in adata.obs.index)
+    tree = prune_leaves(tree, lambda a: a.name not in adata.obs.index)
 
     cell_ids = []
     for a in tree.get_terminals():
