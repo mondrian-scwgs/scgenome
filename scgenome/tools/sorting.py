@@ -43,6 +43,10 @@ def sort_cells(
     if bin_ids is None:
         bin_ids = adata.var.index
 
+    if len(cell_ids) <= 1:
+        adata.obs['cell_order'] = 0.
+        return adata
+
     def __get_layer(layer_name):
         if layer_name is not None:
             return np.array(adata[cell_ids, bin_ids].layers[layer_name])
