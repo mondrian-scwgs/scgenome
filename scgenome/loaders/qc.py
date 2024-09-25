@@ -99,7 +99,7 @@ def load_qc_results(
 
         results_tables.update(hmmcopy_results_tables)
 
-    elif == 'scp':
+    elif framework == 'scp':
         alignment_results_dir = scgenome.loaders.utils.find_results_directory(
             alignment_results_dir, 'alignment')
 
