@@ -48,6 +48,25 @@ def load_alignment_results(results_dir):
     return load_alignment_files(alignment_metrics_filepath, gc_metrics=gc_metrics_filepath)
 
 
+def load_alignment_results_from_qc(results_dir):
+    """ Load alignment metrics tables
+
+    Args:
+        results_dir (str): results directory to load from.
+
+    Returns:
+        dict: pandas.DataFrame tables keyed by table name
+    """
+
+    alignment_metrics_filepath = scgenome.loaders.utils.find_results_filepath(
+        results_dir, '_metrics.csv.gz', 'qc_metrics', analysis_type='alignment')
+
+    gc_metrics_filepath = scgenome.loaders.utils.find_results_filepath(
+        results_dir, '_gc_metrics.csv.gz', 'alignment_gc_metrics', analysis_type='alignment')
+
+    return load_alignment_files(alignment_metrics_filepath, gc_metrics=gc_metrics_filepath)
+
+
 def process_alignment_data(filepath):
     data = CsverveInput(filepath).read_csv()
 

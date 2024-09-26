@@ -70,14 +70,14 @@ def load_qc_results(
             'alignment'
         )
 
-        results_tables = scgenome.loaders.align.load_alignment_results(alignment_results_dir)
+        results_tables = scgenome.loaders.align.load_alignment_results_from_qc(alignment_results_dir)
 
         hmmcopy_results_dir = scgenome.loaders.utils.find_results_directory(
             qc_results_dir,
-            'hmmcopy'
+            'alignment' # the metadata yaml only specifies 'alignment' as type for the QC pipeline which combined alingment + hmmcopy
         )
 
-        hmmcopy_results_tables = scgenome.loaders.hmmcopy.load_hmmcopy_results(
+        hmmcopy_results_tables = scgenome.loaders.hmmcopy.load_hmmcopy_results_from_qc(
             qc_results_dir,
             additional_reads_cols=additional_hmmcopy_reads_cols
         )

@@ -77,6 +77,37 @@ def load_hmmcopy_results(
     )
 
 
+def load_hmmcopy_results_from_qc(
+        results_dir,
+        additional_reads_cols=None,
+    ):
+    """ Load copy number tables
+
+    Args:
+        results_dir (str): results directory to load from.
+
+    KwArgs:
+        additional_reads_cols (list of str, optional): Additional columns to obtain from the reads table. Defaults to None.
+
+    Returns:
+        dict: pandas.DataFrame tables keyed by table name
+    """
+
+    hmmcopy_reads_filepath = scgenome.loaders.utils.find_results_filepath(
+        results_dir, '_reads.csv.gz', 'hmmcopy_reads', analysis_type='alignment')
+
+    hmmcopy_segs_filepath = scgenome.loaders.utils.find_results_filepath(
+        results_dir, '_segments.csv.gz', 'hmmcopy_segments', analysis_type='alignment')
+
+    hmmcopy_metrics_filepath = scgenome.loaders.utils.find_results_filepath(
+        results_dir, '_metrics.csv.gz', 'qc_metrics', analysis_type='alignment')
+
+    return load_hmmcopy_files(
+        hmmcopy_reads_filepath, hmmcopy_segs_filepath, hmmcopy_metrics_filepath,
+        additional_reads_cols=additional_reads_cols,
+    )
+
+
 def process_hmmcopy_data(filepath, usecols=None):
     data = CsverveInput(filepath).read_csv(usecols=usecols)
 
