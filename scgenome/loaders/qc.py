@@ -43,15 +43,18 @@ def load_qc_files(
 
 
 def load_qc_results(
-        alignment_results_dir,
-        hmmcopy_results_dir,
+        framework,
+        alignment_results_dir=None,
+        hmmcopy_results_dir=None,
         annotation_results_dir=None,
+        qc_results_dir=None,
         sample_ids=None,
         additional_hmmcopy_reads_cols=None,
 ):
     """ Load qc data (align, hmmcopy)
     
     Args:
+        framework - scp, mondrian (cromwell), mondrian_nf (nextflow) 
         alignment_results_dir (str): alignment results directory to load from.
         hmmcopy_results_dir (str): hmmcopy results directory to load from.
 
@@ -60,28 +63,67 @@ def load_qc_results(
         sample_ids (list of str, optional): Set of sample ids to filter for. Defaults to None.
         additional_hmmcopy_reads_cols (list of str, optional): Additional columns to obtain from the reads table. Defaults to None.
     """
+ 
+    if framework == 'mondrian_nf':
+        alignment_results_dir = scgenome.loaders.utils.find_results_directory(
+            qc_results_dir,
+            'alignment'
+        )
 
-    alignment_results_dir = scgenome.loaders.utils.find_results_directory(
-        alignment_results_dir, 'alignment')
+        results_tables = scgenome.loaders.align.load_alignment_results_from_qc(alignment_results_dir)
 
-    results_tables = scgenome.loaders.align.load_alignment_results(alignment_results_dir)
+        hmmcopy_results_dir = scgenome.loaders.utils.find_results_directory(
+            qc_results_dir,
+            'alignment' # the metadata yaml only specifies 'alignment' as type for the QC pipeline which combined alingment + hmmcopy
+        )
 
-    hmmcopy_results_dir = scgenome.loaders.utils.find_results_directory(
-        hmmcopy_results_dir, 'hmmcopy')
+        hmmcopy_results_tables = scgenome.loaders.hmmcopy.load_hmmcopy_results_from_qc(
+            qc_results_dir,
+            additional_reads_cols=additional_hmmcopy_reads_cols
+        )
 
-    hmmcopy_results_tables = scgenome.loaders.hmmcopy.load_hmmcopy_results(
-        hmmcopy_results_dir,
-        additional_reads_cols=additional_hmmcopy_reads_cols)
+        results_tables.update(hmmcopy_results_tables)
 
-    results_tables.update(hmmcopy_results_tables)
+    elif framework == 'mondrian':
+        alignment_results_dir = scgenome.loaders.utils.find_results_directory(
+            alignment_results_dir, 'alignment')
 
-    if annotation_results_dir is not None:
+        results_tables = scgenome.loaders.align.load_alignment_results(alignment_results_dir)
+
+        hmmcopy_results_dir = scgenome.loaders.utils.find_results_directory(
+            hmmcopy_results_dir, 'hmmcopy')
+
+        hmmcopy_results_tables = scgenome.loaders.hmmcopy.load_hmmcopy_results(
+            hmmcopy_results_dir,
+            additional_reads_cols=additional_hmmcopy_reads_cols)
+
+        results_tables.update(hmmcopy_results_tables)
+
+    elif framework == 'scp':
+        alignment_results_dir = scgenome.loaders.utils.find_results_directory(
+            alignment_results_dir, 'alignment')
+
+        results_tables = scgenome.loaders.align.load_alignment_results(alignment_results_dir)
+
+        hmmcopy_results_dir = scgenome.loaders.utils.find_results_directory(
+            hmmcopy_results_dir, 'hmmcopy')
+
+        hmmcopy_results_tables = scgenome.loaders.hmmcopy.load_hmmcopy_results(
+            hmmcopy_results_dir,
+            additional_reads_cols=additional_hmmcopy_reads_cols)
+
+        results_tables.update(hmmcopy_results_tables)
+
         annotation_results_dir = scgenome.loaders.utils.find_results_directory(
             annotation_results_dir, 'annotation')
 
         annotation_results_tables = scgenome.loaders.annotation.load_annotation_results(annotation_results_dir)
 
         results_tables.update(annotation_results_tables)
+    else:
+        raise Exception(f"Framework '{framework}' not configured.")
+
+    #TODO: clean up the above, too much repetition
 
     if sample_ids is not None:
         results_tables = _sample_id_filter(results_tables, sample_ids)
