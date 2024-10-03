@@ -190,6 +190,28 @@ def intersect_regions(a: DataFrame, b: DataFrame) -> DataFrame:
     return intersect
 
 
+def intersect_positions(a: DataFrame, b: DataFrame):
+    """ Compute a position by cell matrix from a bin by cell matrix and a set of positions
+
+    a position by cell matrix from a bin by cell matrix and a set of positions representing locations of heterozygous SNPs.
+
+    Parameters
+    ----------
+    a : DataFrame
+        region data with columns 'chr', 'start', 'end', ...
+    b : DataFrame
+        region data with columns 'chr', 'position', ...
+    """
+
+    b['start'] = b['position']
+    b['end'] = b['position']
+
+    intersect = intersect_regions(a, b)
+    intersect = intersect.drop(['start', 'end'], axis=1)
+
+    return intersect
+
+
 def rebin(adata: AnnData, target_bins: DataFrame, outer_join: bool=False, agg_X=None, agg_var=None, agg_layers=()) -> AnnData:
     """ Rebin an AnnData and aggregate across multiple intersecting regions
 
