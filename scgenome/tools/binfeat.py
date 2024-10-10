@@ -13,7 +13,7 @@ def _chromosome_count_gc(data, **kwargs):
     chromosome = kwargs['chromosome']
     column_name = kwargs['column_name']
 
-    genome = pyfaidx.Fasta(genome_fasta)
+    genome = pyfaidx.Fasta(genome_fasta, rebuild=False)
     chrom_sequence = np.fromiter(str(genome[chromosome]).upper(), dtype='<U1')
 
     gc_indicator = ((chrom_sequence == 'G') | (chrom_sequence == 'C')) * 1
