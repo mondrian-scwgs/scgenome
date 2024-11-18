@@ -77,8 +77,6 @@ def aggregate_genes(
         list of layers to aggregate, by default None, all layers
     agg_var : List, optional
         list of obs columns to aggregate, by default None, all columns
-    cluster_col : str, optional
-        column with cluster ids, by default 'cluster_id'
 
     Returns
     -------
