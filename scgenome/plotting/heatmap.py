@@ -29,7 +29,8 @@ def plot_cell_cn_matrix(
         vmax=None,
         cmap=None,
         show_cell_ids=False,
-        style='black'):
+        style='black',
+        rasterized=False):
     """ Plot a copy number matrix
 
     Parameters
@@ -54,6 +55,8 @@ def plot_cell_cn_matrix(
         show cell ids on heatmap axis, by default False
     style : str, optional, default 'black'
         style for spines and chromosome dividing lines and other plot elements
+    rasterized : bool, optional
+        rasterize the plot, by default False
 
     Returns
     -------
@@ -109,11 +112,11 @@ def plot_cell_cn_matrix(
 
     if not raw:
         X_colors = cn_colors.map_cn_colors(X)
-        im = ax.imshow(X_colors, aspect='auto', interpolation='none', vmin=vmin, vmax=vmax)
+        im = ax.imshow(X_colors, aspect='auto', interpolation='none', vmin=vmin, vmax=vmax, rasterized=rasterized)
 
     else:
         cmap = matplotlib.cm.get_cmap(cmap)
-        im = ax.imshow(X, aspect='auto', cmap=cmap, interpolation='none', vmin=vmin, vmax=vmax)
+        im = ax.imshow(X, aspect='auto', cmap=cmap, interpolation='none', vmin=vmin, vmax=vmax, rasterized=rasterized)
 
     mat_chrom_idxs = chr_start[genome_ordering][:, 1]
     chrom_boundaries = np.array([0] + list(1 + np.where(mat_chrom_idxs[1:] != mat_chrom_idxs[:-1])[0]) + [mat_chrom_idxs.shape[0]])
