@@ -1,5 +1,6 @@
 import logging
 import sklearn.cluster
+import sklearn.ensemble
 import sklearn.mixture
 import sklearn.preprocessing
 import umap
