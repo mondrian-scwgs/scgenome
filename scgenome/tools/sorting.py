@@ -65,8 +65,7 @@ def sort_cells(
     if standarize:
         X = sklearn.preprocessing.StandardScaler().fit_transform(X)
 
-    D = dst.squareform(dst.pdist(X, 'cityblock'))
-    Y = sch.linkage(D, method='complete')
+    Y = sch.linkage(dst.pdist(X, 'cityblock'), method='complete')
     Z = sch.dendrogram(Y, color_threshold=-1, no_plot=True)
     idx = np.array(Z['leaves'])
 
