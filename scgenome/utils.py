@@ -34,11 +34,11 @@ def union_categories(dfs, cat_cols=None):
     for col in col_categories:
         col_categories[col] = col_categories[col] - set([None, np.nan])
 
-    # Create a pandas index for each set of categories
+    # Create a pandas index for each set of categories, sort for reproducibility
     for col, categories in col_categories.items():
-        col_categories[col] = pd.Index(categories)
+        col_categories[col] = pd.Index(sorted(categories))
 
-    # Set all categorical columns as having teh same set of categories
+    # Set all categorical columns as having the same set of categories
     for col in cat_cols:
         for df in dfs:
             if col in df:
@@ -66,11 +66,11 @@ def concat_with_categories(dfs, **kwargs):
     for col in col_categories:
         col_categories[col] = col_categories[col] - set([None, np.nan])
 
-    # Create a pandas index for each set of categories
+    # Create a pandas index for each set of categories, sort for reproducibility
     for col, categories in col_categories.items():
-        col_categories[col] = pd.Index(categories)
+        col_categories[col] = pd.Index(sorted(categories))
 
-    # Set all categorical columns as having teh same set of categories
+    # Set all categorical columns as having the same set of categories
     for df in dfs:
         for col in cat_cols:
             df[col] = df[col].astype('category')
