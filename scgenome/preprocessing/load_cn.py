@@ -127,9 +127,13 @@ def create_cn_anndata(
             .reindex(X.index))
     cell_data.index = cell_data.index.astype(str)
 
+    if X.empty:
+        X = np.empty((0, 0))
+        dtype = float
+
     adata = ad.AnnData(
         X,
-        dtype=X.dtypes.iloc[0],
+        dtype=dtype,
         obs=cell_data,
         var=bin_data,
         layers=layers,
