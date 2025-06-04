@@ -26,7 +26,6 @@ Data loading
    pp.read_dlp_hmmcopy
    pp.convert_dlp_hmmcopy
    pp.convert_dlp_signals
-   pp.read_bam_bin_counts
    pp.read_snv_genotyping
 
 Filtering

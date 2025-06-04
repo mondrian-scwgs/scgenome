@@ -29,7 +29,6 @@ def test_imports():
     print(scgenome.pp.read_dlp_hmmcopy)
     print(scgenome.pp.convert_dlp_hmmcopy)
     print(scgenome.pp.convert_dlp_signals)
-    print(scgenome.pp.read_bam_bin_counts)
     print(scgenome.pp.read_medicc2_cn)
     print(scgenome.pp.read_snv_genotyping)
 
