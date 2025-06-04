@@ -3,9 +3,10 @@ import pyBigWig
 import numba
 import numpy as np
 import pandas as pd
+import pyranges as pr
 
 import scgenome.refgenome
-import scgenome.tools.ranges
+from scgenome.tools.ranges import dataframe_to_pyranges, pyranges_to_dataframe
 
 
 def _chromosome_count_gc(data, **kwargs):
@@ -24,7 +25,7 @@ def _chromosome_count_gc(data, **kwargs):
     return data
 
 
-def count_gc(bins, genome_fasta, column_name='gc', proportion=False):
+def count_gc_pr(bins, genome_fasta, column_name='gc'):
     """ Count gc in each bin
 
     Parameters
@@ -35,19 +36,45 @@ def count_gc(bins, genome_fasta, column_name='gc', proportion=False):
         reference genome fasta
     column_name : str, optional
         column to add to `bins`, by default 'gc'
-    proportion : bool, optional
-        proportion of length, by default False
 
     Returns
     -------
     pyranges.PyRanges
         output ranges with additional column for gc count
-    """    
+    """
 
     data = bins.apply(_chromosome_count_gc, genome_fasta=genome_fasta, column_name=column_name)
 
+    return data
+
+
+def count_gc(bins, genome_fasta, column_name='gc', proportion=False):
+    """ Count gc in each bin
+
+    Parameters
+    ----------
+    bins : pandas.DataFrame
+        dataframe with columns 'chr', 'start', 'end'
+    genome_fasta : str
+        reference genome fasta
+    column_name : str, optional
+        column to add to `bins`, by default 'gc'
+    proportion : bool, optional
+        proportion of length, by default False
+
+    Returns
+    -------
+    pandas.DataFrame
+        output dataframe with columns 'chr', 'start', 'end' and additional column for gc count
+    """
+
+    if bins.empty:
+        return pd.DataFrame(columns=['chr', 'start', 'end', 'bin', column_name])
+
+    data = pyranges_to_dataframe(count_gc_pr(dataframe_to_pyranges(bins), genome_fasta, column_name=column_name))
+
     if proportion:
-        data = data.assign(column_name, lambda df: df[column_name] / (df['End'] - df['Start']))
+        data[column_name] = data[column_name] / (data['end'] - data['start'])
 
     return data
 
@@ -66,15 +93,15 @@ def add_cyto_giemsa_stain(bins):
         output dataframe with columns 'chr', 'start', 'end' and additional column for giesma stain values
     """    
 
-    bins_pr = scgenome.tools.ranges.dataframe_to_pyranges(bins.rename_axis('_index').reset_index())
-    cyto_pr = scgenome.tools.ranges.dataframe_to_pyranges(scgenome.refgenome.info.cytobands)
+    bins_pr = dataframe_to_pyranges(bins.rename_axis('_index').reset_index())
+    cyto_pr = dataframe_to_pyranges(scgenome.refgenome.info.cytobands)
 
     intersect_1 = bins_pr.intersect(cyto_pr)
     intersect_2 = cyto_pr.intersect(bins_pr)
 
     intersect = pd.merge(
-        scgenome.tools.ranges.pyranges_to_dataframe(intersect_1),
-        scgenome.tools.ranges.pyranges_to_dataframe(intersect_2))
+        pyranges_to_dataframe(intersect_1),
+        pyranges_to_dataframe(intersect_2))
 
     intersect['_width'] = intersect['end'] - intersect['start'] + 1
 
