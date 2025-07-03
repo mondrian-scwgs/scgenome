@@ -130,7 +130,7 @@ def _chromosome_mean_bigwig(data, **kwargs):
     bw = pyBigWig.open(bigwig_file, 'r')
 
     if chromosome not in bw.chroms():
-        data[column_name] = None
+        data[column_name] = np.NaN
         return data
 
     chromosome_length = bw.chroms()[chromosome]
