@@ -17,7 +17,7 @@ setup(
         'matplotlib',
         'nose',
         'numba',
-        'numpy==1.23',
+        'numpy>=1.23',
         'pandas',
         'pyBigWig',
         'pyfaidx',
