@@ -127,6 +127,7 @@ def create_cn_anndata(
             .reindex(X.index))
     cell_data.index = cell_data.index.astype(str)
 
+    dtype = None
     if X.empty:
         X = np.empty((0, 0))
         dtype = float
