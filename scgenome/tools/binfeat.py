@@ -105,7 +105,7 @@ def add_cyto_giemsa_stain(bins):
 
     intersect['_width'] = intersect['end'] - intersect['start'] + 1
 
-    selected = intersect.sort_values('_width').drop_duplicates(['_index'], keep='last').set_index('_index')
+    selected = intersect.sort_values(['_width', 'cyto_band_name']).drop_duplicates(['_index'], keep='last').set_index('_index')
 
     cols = ['cyto_band_name', 'cyto_band_giemsa_stain']
     bins = bins.merge(selected[cols], left_index=True, right_index=True, how='left')
