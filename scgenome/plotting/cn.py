@@ -42,7 +42,7 @@ def setup_genome_xaxis_lims(ax, chromosome=None, start=None, end=None):
 
 def setup_genome_xaxis_ticks(ax, chromosome=None, start=None, end=None, major_spacing=2e7, minor_spacing=1e6, chromosome_names=None):
     if chromosome_names is None:
-        chromosome_names = {}
+        chromosome_names = refgenome.info.chromosome_info.set_index('chr')['chr_plot']
     
     if chromosome is not None:
         if major_spacing is None:
