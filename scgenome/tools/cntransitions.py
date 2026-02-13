@@ -96,7 +96,7 @@ def generate_cn_transition_pair_counts(cn_data):
     cell_region_counts = count_pairs(cell_transitions_matrix.values)
 
     # Create a stacked format matrix that does not include 0 entries
-    cell_region_counts[cell_region_counts == 0] = np.NaN
+    cell_region_counts[cell_region_counts == 0] = np.nan
 
     cell_region_counts = pd.DataFrame(
         cell_region_counts,
