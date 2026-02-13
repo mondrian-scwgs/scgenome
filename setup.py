@@ -12,12 +12,11 @@ setup(
     install_requires=[
         'anndata',
         'Click',
-        'csverve>=0.3.1',
         'hdbscan',
         'matplotlib',
         'nose',
         'numba',
-        'numpy>=1.23',
+        'numpy',
         'pandas',
         'pyBigWig',
         'pyfaidx',
