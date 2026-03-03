@@ -1,5 +1,5 @@
 
-from .cn import plot_cn_profile, plot_profile
+from .cn import plot_cn_profile, plot_profile, plot_rearrangement_arcs
 from .cn_colors import cn_legend
 from .heatmap import plot_cell_cn_matrix, plot_cell_cn_matrix_fig
 from .qc import plot_gc_reads

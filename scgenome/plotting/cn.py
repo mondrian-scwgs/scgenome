@@ -1,8 +1,13 @@
 import matplotlib
 import matplotlib.pyplot as plt
+import matplotlib.lines as mlines
+import matplotlib.patches as mpatches
+import matplotlib.transforms as transforms
 import numpy as np
+import pandas as pd
 import seaborn as sns
 from anndata import AnnData
+from matplotlib.path import Path
 from pandas import DataFrame
 from scgenome import refgenome
 from scipy.sparse import issparse
@@ -300,3 +305,342 @@ def plot_cn_profile(
         tick_major_spacing=tick_major_spacing,
         tick_minor_spacing=tick_minor_spacing,
         **kwargs)
+
+
+def plot_rearrangement_arcs(
+    ax,
+    breakpoints,
+    chromosome=None,
+    start=None,
+    end=None,
+    height_diff_strand=0.10,
+    height_same_strand=0.20,
+    height_out_of_view=0.30,
+    line_bottom=0.0,
+    arc_height_min=0.1,
+    arc_height_scale=1.0,
+    diagonal_length=0.05,
+    strand_colors=None,
+    linewidth=0.5,
+    connector_linewidth=1.0,
+    show_rail_lines=True,
+    rail_linewidth=0.5,
+    rail_color='gray',
+    rail_alpha=0.5,
+    alpha=1.0,
+    zorder=10,
+):
+    """Plot rearrangement arcs linking breakpoint pairs.
+    
+    Draws vertical lines at breakpoint positions extending above the axes,
+    connected by curved arcs. Rail height determined by strand combination:
+    - +/- or -/+ (different strands): lowest rail
+    - +/+ or -/- (same strands): middle rail
+    - out of view partner: highest rail (diagonal line instead of arc)
+    
+    Arc direction determined by the strand at the leftmost position:
+    - strand_left == '+' : arc curves upward (above rail)
+    - strand_left == '-' : arc curves downward (below rail)
+    
+    When a breakend's partner is out of view (different chromosome or outside
+    the start/end range), a diagonal line is drawn to the highest rail to
+    indicate the connection goes off-screen.
+    
+    Colors are determined by strand combination (strand_left, strand_right)
+    where left/right refers to genome position.
+    
+    Arc curvature scales with distance between breakpoints.
+    
+    All y-coordinates are in axes fraction (0=bottom, 1=top of axes).
+    Values > 1 extend above the axes.
+    
+    Parameters
+    ----------
+    ax : matplotlib.axes.Axes
+        Axes to draw on
+    breakpoints : pandas.DataFrame
+        DataFrame with columns:
+        - chromosome_1, position_1, strand_1
+        - chromosome_2, position_2, strand_2
+    chromosome : str, optional
+        If specified, only plot breakpoints on this chromosome.
+        If None, uses whole-genome coordinates with chromosome offsets.
+    start : int, optional
+        Start position of view region (used with chromosome parameter).
+    end : int, optional
+        End position of view region (used with chromosome parameter).
+    height_diff_strand : float, optional
+        Rail height for +/- and -/+ (different strands) in axes fraction
+        (default 0.10, i.e., 10% above the top of the axes). Lowest rail.
+    height_same_strand : float, optional
+        Rail height for +/+ and -/- (same strands) in axes fraction
+        (default 0.20, i.e., 20% above the top of the axes). Middle rail.
+    height_out_of_view : float, optional
+        Rail height for out-of-view partners in axes fraction
+        (default 0.30, i.e., 30% above the top of the axes). Highest rail.
+    line_bottom : float, optional
+        Bottom of vertical lines in axes fraction (default 0).
+    arc_height_min : float, optional
+        Minimum arc height as fraction of rail spacing
+        (default 0.1, i.e., 10% of the space between rails).
+    arc_height_scale : float, optional
+        Scale factor for arc height (default 1.0).
+    diagonal_length : float, optional
+        Length of diagonal lines for out-of-view partners in axes fraction
+        (default 0.05).
+    strand_colors : dict, optional
+        Dict mapping strand combinations to colors. Keys should be
+        tuples like ('+', '-') where first element is the strand at
+        the leftmost position and second is at the rightmost.
+        Default colors: +/+ green, +/- blue, -/+ orange, -/- purple.
+    linewidth : float, optional
+        Width of vertical lines (default 0.5).
+    connector_linewidth : float, optional
+        Width of arc curves (default 1.0).
+    show_rail_lines : bool, optional
+        Whether to draw horizontal reference lines at the
+        rail heights (default True).
+    rail_linewidth : float, optional
+        Width of rail lines (default 0.5).
+    rail_color : str, optional
+        Color of rail lines (default 'gray').
+    rail_alpha : float, optional
+        Transparency of rail lines (default 0.5).
+    alpha : float, optional
+        Transparency for breakpoint lines (default 1.0).
+    zorder : int, optional
+        Drawing order (default 10).
+    
+    Returns
+    -------
+    list
+        List of artists added to the axes.
+    
+    Examples
+    --------
+    >>> brks = pd.DataFrame({
+    ...     'chromosome_1': ['chr1', 'chr1'],
+    ...     'position_1': [1e6, 5e6],
+    ...     'strand_1': ['+', '-'],
+    ...     'chromosome_2': ['chr1', 'chr1'],
+    ...     'position_2': [2e6, 8e6],
+    ...     'strand_2': ['-', '-'],
+    ... })
+    >>> fig, ax = plt.subplots()
+    >>> ax.set_xlim(0, 10e6)
+    >>> ax.set_ylim(0, 8)
+    >>> plot_rearrangement_arcs(ax, brks, chromosome='chr1')
+    """
+    artists = []
+    breakpoints = breakpoints.copy()
+    
+    # Normalize chromosome names
+    for col in ['chromosome_1', 'chromosome_2']:
+        if col in breakpoints.columns:
+            breakpoints[col] = breakpoints[col].astype(str)
+    
+    # Blended transform: x in data coords, y in axes coords
+    trans = transforms.blended_transform_factory(ax.transData, ax.transAxes)
+    
+    # Default colors by strand combination (strand_left, strand_right)
+    default_strand_colors = {
+        ('+', '+'): '#31a354',  # green - inversion (same strand)
+        ('+', '-'): '#3182bd',  # blue - deletion-like
+        ('-', '+'): '#e6550d',  # orange - duplication-like
+        ('-', '-'): '#756bb1',  # purple - inversion (same strand)
+    }
+    if strand_colors is not None:
+        default_strand_colors.update(strand_colors)
+    
+    xlim = ax.get_xlim()
+    x_range = xlim[1] - xlim[0]
+    
+    # Determine view region
+    if start is not None:
+        view_start = start
+    else:
+        view_start = xlim[0]
+    if end is not None:
+        view_end = end
+    else:
+        view_end = xlim[1]
+    
+    # Rail spacing (distance between the two rail lines)
+    rail_spacing = abs(height_same_strand - height_diff_strand)
+    
+    # Diagonal x-offset in data coordinates
+    diag_x_offset = diagonal_length * x_range
+    
+    for idx, row in breakpoints.iterrows():
+        chrom1 = str(row['chromosome_1'])
+        chrom2 = str(row['chromosome_2'])
+        pos1 = row['position_1']
+        pos2 = row['position_2']
+        strand1 = row.get('strand_1', '+')
+        strand2 = row.get('strand_2', '+')
+        
+        # Track if breakends are on the target chromosome
+        on_chrom_1 = True
+        on_chrom_2 = True
+        
+        # Filter by chromosome and determine positions
+        if chromosome is not None:
+            chrom_match = chromosome.replace('chr', '')
+            c1_match = chrom1.replace('chr', '')
+            c2_match = chrom2.replace('chr', '')
+            
+            on_chrom_1 = (c1_match == chrom_match)
+            on_chrom_2 = (c2_match == chrom_match)
+            
+            if not on_chrom_1 and not on_chrom_2:
+                continue
+        else:
+            try:
+                chromosome_info = refgenome.info.chromosome_info.set_index('chr')
+                if chrom1 in chromosome_info.index:
+                    pos1 = pos1 + chromosome_info.loc[chrom1, 'chromosome_start']
+                if chrom2 in chromosome_info.index:
+                    pos2 = pos2 + chromosome_info.loc[chrom2, 'chromosome_start']
+            except:
+                pass
+        
+        # Check if positions are within view region
+        in_view_1 = on_chrom_1 and (view_start <= pos1 <= view_end)
+        in_view_2 = on_chrom_2 and (view_start <= pos2 <= view_end)
+        
+        if not in_view_1 and not in_view_2:
+            continue
+        
+        # Determine strand_left and strand_right based on genome position
+        if pos1 <= pos2:
+            strand_left, strand_right = strand1, strand2
+            pos_left, pos_right = pos1, pos2
+            in_view_left, in_view_right = in_view_1, in_view_2
+        else:
+            strand_left, strand_right = strand2, strand1
+            pos_left, pos_right = pos2, pos1
+            in_view_left, in_view_right = in_view_2, in_view_1
+        
+        # Determine color based on strand combination
+        strand_combo = (strand_left, strand_right)
+        color = default_strand_colors.get(strand_combo, '#000000')
+        
+        # Determine rail height based on strand combination
+        same_strand = (strand_left == strand_right)
+        rail_height = 1.0 + (height_same_strand if same_strand else height_diff_strand)
+        
+        # Determine arc direction: left strand + curves up, - curves down
+        arc_direction = 1 if strand_left == '+' else -1
+        
+        # Both breakends in view - draw arc
+        if in_view_left and in_view_right:
+            # Draw vertical lines
+            line1 = mlines.Line2D(
+                [pos_left, pos_left], [line_bottom, rail_height],
+                color=color, linewidth=linewidth, alpha=alpha,
+                zorder=zorder, clip_on=False, transform=trans
+            )
+            ax.add_line(line1)
+            artists.append(line1)
+            
+            line2 = mlines.Line2D(
+                [pos_right, pos_right], [line_bottom, rail_height],
+                color=color, linewidth=linewidth, alpha=alpha,
+                zorder=zorder, clip_on=False, transform=trans
+            )
+            ax.add_line(line2)
+            artists.append(line2)
+            
+            # Calculate arc height based on distance between breakpoints
+            x_dist_frac = abs(pos_right - pos_left) / x_range
+            arc_height = max(arc_height_min, x_dist_frac) * rail_spacing * arc_height_scale
+            arc_peak = rail_height + arc_direction * arc_height
+            
+            # Draw curved arc
+            xmid = (pos_left + pos_right) / 2
+            control_y = 2 * arc_peak - rail_height
+            
+            verts = [
+                (pos_left, rail_height),
+                (xmid, control_y),
+                (pos_right, rail_height),
+            ]
+            codes = [Path.MOVETO, Path.CURVE3, Path.CURVE3]
+            
+            path = Path(verts, codes)
+            patch = mpatches.PathPatch(
+                path, facecolor='none', edgecolor=color,
+                linewidth=connector_linewidth, alpha=alpha,
+                zorder=zorder, clip_on=False, transform=trans
+            )
+            ax.add_patch(patch)
+            artists.append(patch)
+        
+        # Only left breakend in view - partner is to the right or on different chromosome
+        elif in_view_left and not in_view_right:
+            # Out-of-view rail height (highest rail)
+            oov_rail_height = 1.0 + height_out_of_view
+            
+            # Draw vertical line up to out-of-view rail
+            line = mlines.Line2D(
+                [pos_left, pos_left], [line_bottom, oov_rail_height],
+                color=color, linewidth=linewidth, alpha=alpha,
+                zorder=zorder, clip_on=False, transform=trans
+            )
+            ax.add_line(line)
+            artists.append(line)
+            
+            # Draw diagonal line pointing right (partner is to the right)
+            diag_y = diagonal_length * arc_direction
+            diag = mlines.Line2D(
+                [pos_left, pos_left + diag_x_offset],
+                [oov_rail_height, oov_rail_height + diag_y],
+                color=color, linewidth=connector_linewidth, alpha=alpha,
+                zorder=zorder, clip_on=False, transform=trans
+            )
+            ax.add_line(diag)
+            artists.append(diag)
+        
+        # Only right breakend in view - partner is to the left or on different chromosome
+        elif not in_view_left and in_view_right:
+            # Out-of-view rail height (highest rail)
+            oov_rail_height = 1.0 + height_out_of_view
+            
+            # Draw vertical line up to out-of-view rail
+            line = mlines.Line2D(
+                [pos_right, pos_right], [line_bottom, oov_rail_height],
+                color=color, linewidth=linewidth, alpha=alpha,
+                zorder=zorder, clip_on=False, transform=trans
+            )
+            ax.add_line(line)
+            artists.append(line)
+            
+            # Draw diagonal line pointing left (partner is to the left)
+            diag_y = diagonal_length * arc_direction
+            diag = mlines.Line2D(
+                [pos_right, pos_right - diag_x_offset],
+                [oov_rail_height, oov_rail_height + diag_y],
+                color=color, linewidth=connector_linewidth, alpha=alpha,
+                zorder=zorder, clip_on=False, transform=trans
+            )
+            ax.add_line(diag)
+            artists.append(diag)
+    
+    # Draw rail lines at all three heights (always)
+    if show_rail_lines:
+        rail_heights = [
+            1.0 + height_diff_strand,
+            1.0 + height_same_strand,
+            1.0 + height_out_of_view,
+        ]
+        for h in rail_heights:
+            rail = mlines.Line2D(
+                [xlim[0], xlim[1]], [h, h],
+                color=rail_color, linewidth=rail_linewidth, alpha=rail_alpha,
+                zorder=zorder - 1, clip_on=False, transform=trans,
+                linestyle='--'
+            )
+            ax.add_line(rail)
+            artists.append(rail)
+    
+    return artists
