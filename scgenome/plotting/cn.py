@@ -71,6 +71,13 @@ def setup_genome_xaxis_ticks(ax, chromosome=None, start=None, end=None, major_sp
         ax.xaxis.set_minor_locator(matplotlib.ticker.FixedLocator(xminorticks + chromosome_start))
         ax.xaxis.set_minor_formatter(matplotlib.ticker.NullFormatter())
 
+        if start is not None and end is not None:
+            ax.set_xlim(chromosome_start+start, chromosome_start+end)
+        elif start is not None:
+            ax.set_xlim(left=chromosome_start+start)
+        elif end is not None:
+            ax.set_xlim(right=chromosome_start+end)
+
     else:
         ax.set_xticks([0] + refgenome.info.chromosome_info['chromosome_end'].values.tolist())
         ax.set_xticklabels([])
@@ -170,6 +177,15 @@ def plot_profile(
     if palette is None and hue is not None:
         palette = cn_colors.color_reference
 
+    if chromosome is not None:
+        data = data[data['chr'] == chromosome]
+
+    if start is not None:
+        data = data[data['start'] >= start]
+
+    if end is not None:
+        data = data[data['end'] <= end]
+
     genome_axis_plot(
         data,
         sns.scatterplot,
@@ -179,6 +195,7 @@ def plot_profile(
         hue=hue,
         palette=palette,
         ax=ax,
+        clip_on=False,
         **kwargs)
 
     setup_genome_xaxis_ticks(
@@ -322,11 +339,13 @@ def plot_rearrangement_arcs(
     diagonal_length=0.05,
     strand_colors=None,
     linewidth=0.5,
-    connector_linewidth=1.0,
+    connector_linewidth=0.5,
     show_rail_lines=True,
+    show_rail_labels=True,
     rail_linewidth=0.5,
     rail_color='gray',
     rail_alpha=0.5,
+    label_fontsize=7,
     alpha=1.0,
     zorder=10,
 ):
@@ -396,16 +415,21 @@ def plot_rearrangement_arcs(
     linewidth : float, optional
         Width of vertical lines (default 0.5).
     connector_linewidth : float, optional
-        Width of arc curves (default 1.0).
+        Width of arc curves (default 0.5).
     show_rail_lines : bool, optional
         Whether to draw horizontal reference lines at the
         rail heights (default True).
+    show_rail_labels : bool, optional
+        Whether to draw strand combination labels on rails
+        (default True).
     rail_linewidth : float, optional
         Width of rail lines (default 0.5).
     rail_color : str, optional
         Color of rail lines (default 'gray').
     rail_alpha : float, optional
         Transparency of rail lines (default 0.5).
+    label_fontsize : float, optional
+        Font size for rail labels (default 7).
     alpha : float, optional
         Transparency for breakpoint lines (default 1.0).
     zorder : int, optional
@@ -443,11 +467,14 @@ def plot_rearrangement_arcs(
     trans = transforms.blended_transform_factory(ax.transData, ax.transAxes)
     
     # Default colors by strand combination (strand_left, strand_right)
+    # '?' indicates out-of-view partner
     default_strand_colors = {
         ('+', '+'): '#31a354',  # green - inversion (same strand)
         ('+', '-'): '#3182bd',  # blue - deletion-like
         ('-', '+'): '#e6550d',  # orange - duplication-like
         ('-', '-'): '#756bb1',  # purple - inversion (same strand)
+        ('+', '?'): '#74c476',  # light green - out of view, + strand visible
+        ('-', '?'): '#9e9ac8',  # light purple - out of view, - strand visible
     }
     if strand_colors is not None:
         default_strand_colors.update(strand_colors)
@@ -576,51 +603,61 @@ def plot_rearrangement_arcs(
             ax.add_patch(patch)
             artists.append(patch)
         
-        # Only left breakend in view - partner is to the right or on different chromosome
+        # Only left breakend in view - partner is out of view
         elif in_view_left and not in_view_right:
-            # Out-of-view rail height (highest rail)
             oov_rail_height = 1.0 + height_out_of_view
+            
+            # Color based on visible breakend's strand
+            oov_color = default_strand_colors.get((strand_left, '?'), '#636363')
+            
+            # Direction based on visible breakend's strand: + goes up, - goes down
+            visible_strand_direction = 1 if strand_left == '+' else -1
             
             # Draw vertical line up to out-of-view rail
             line = mlines.Line2D(
                 [pos_left, pos_left], [line_bottom, oov_rail_height],
-                color=color, linewidth=linewidth, alpha=alpha,
+                color=oov_color, linewidth=linewidth, alpha=alpha,
                 zorder=zorder, clip_on=False, transform=trans
             )
             ax.add_line(line)
             artists.append(line)
             
-            # Draw diagonal line pointing right (partner is to the right)
-            diag_y = diagonal_length * arc_direction
+            # Draw diagonal line: left-to-right, up/down based on visible strand
+            diag_y = diagonal_length * visible_strand_direction
             diag = mlines.Line2D(
                 [pos_left, pos_left + diag_x_offset],
                 [oov_rail_height, oov_rail_height + diag_y],
-                color=color, linewidth=connector_linewidth, alpha=alpha,
+                color=oov_color, linewidth=connector_linewidth, alpha=alpha,
                 zorder=zorder, clip_on=False, transform=trans
             )
             ax.add_line(diag)
             artists.append(diag)
         
-        # Only right breakend in view - partner is to the left or on different chromosome
+        # Only right breakend in view - partner is out of view
         elif not in_view_left and in_view_right:
-            # Out-of-view rail height (highest rail)
             oov_rail_height = 1.0 + height_out_of_view
+            
+            # Color based on visible breakend's strand
+            oov_color = default_strand_colors.get((strand_right, '?'), '#636363')
+            
+            # Direction based on visible breakend's strand: + goes up, - goes down
+            visible_strand_direction = 1 if strand_right == '+' else -1
             
             # Draw vertical line up to out-of-view rail
             line = mlines.Line2D(
                 [pos_right, pos_right], [line_bottom, oov_rail_height],
-                color=color, linewidth=linewidth, alpha=alpha,
+                color=oov_color, linewidth=linewidth, alpha=alpha,
                 zorder=zorder, clip_on=False, transform=trans
             )
             ax.add_line(line)
             artists.append(line)
             
-            # Draw diagonal line pointing left (partner is to the left)
-            diag_y = diagonal_length * arc_direction
+            # Draw diagonal line: left-to-right, up/down based on visible strand
+            diag_y = diagonal_length * visible_strand_direction
             diag = mlines.Line2D(
-                [pos_right, pos_right - diag_x_offset],
+                [pos_right, pos_right + diag_x_offset],
                 [oov_rail_height, oov_rail_height + diag_y],
-                color=color, linewidth=connector_linewidth, alpha=alpha,
+                color=oov_color, linewidth=connector_linewidth, alpha=alpha,
                 zorder=zorder, clip_on=False, transform=trans
             )
             ax.add_line(diag)
@@ -642,5 +679,61 @@ def plot_rearrangement_arcs(
             )
             ax.add_line(rail)
             artists.append(rail)
+    
+    # Draw rail labels with strand combination text
+    if show_rail_labels:
+        label_x = xlim[1]
+        label_offset = 0.015
+        
+        # Lower rail (different strands): +/- and -/+
+        h_diff = 1.0 + height_diff_strand
+        txt_plus_minus = ax.text(
+            label_x, h_diff + label_offset, '+/−',
+            color=default_strand_colors[('+', '-')],
+            fontsize=label_fontsize, ha='right', va='bottom',
+            transform=trans, clip_on=False, zorder=zorder
+        )
+        artists.append(txt_plus_minus)
+        txt_minus_plus = ax.text(
+            label_x, h_diff - label_offset, '−/+',
+            color=default_strand_colors[('-', '+')],
+            fontsize=label_fontsize, ha='right', va='top',
+            transform=trans, clip_on=False, zorder=zorder
+        )
+        artists.append(txt_minus_plus)
+        
+        # Middle rail (same strands): +/+ and -/-
+        h_same = 1.0 + height_same_strand
+        txt_plus_plus = ax.text(
+            label_x, h_same + label_offset, '+/+',
+            color=default_strand_colors[('+', '+')],
+            fontsize=label_fontsize, ha='right', va='bottom',
+            transform=trans, clip_on=False, zorder=zorder
+        )
+        artists.append(txt_plus_plus)
+        txt_minus_minus = ax.text(
+            label_x, h_same - label_offset, '−/−',
+            color=default_strand_colors[('-', '-')],
+            fontsize=label_fontsize, ha='right', va='top',
+            transform=trans, clip_on=False, zorder=zorder
+        )
+        artists.append(txt_minus_minus)
+        
+        # Upper rail (out of view): +/? and -/?
+        h_oov = 1.0 + height_out_of_view
+        txt_plus_oov = ax.text(
+            label_x, h_oov + label_offset, '+/?',
+            color=default_strand_colors[('+', '?')],
+            fontsize=label_fontsize, ha='right', va='bottom',
+            transform=trans, clip_on=False, zorder=zorder
+        )
+        artists.append(txt_plus_oov)
+        txt_minus_oov = ax.text(
+            label_x, h_oov - label_offset, '−/?',
+            color=default_strand_colors[('-', '?')],
+            fontsize=label_fontsize, ha='right', va='top',
+            transform=trans, clip_on=False, zorder=zorder
+        )
+        artists.append(txt_minus_oov)
     
     return artists

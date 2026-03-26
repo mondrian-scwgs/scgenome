@@ -32,8 +32,9 @@ def map_cn_colors(X: ndarray) -> ndarray:
         colors with shape X.shape + (3,)
     """
     X_colors = np.zeros(X.shape + (3,), dtype=int)
-    X_colors[X < 0, :] = 0
-    X_colors[X > max(color_reference.keys()), :] = max(color_reference.keys())
+    X_colors[:] = hex_to_rgb('#ffffff')
+    X_colors[X < 0, :] = hex_to_rgb(color_reference[0])
+    X_colors[X > max(color_reference.keys()), :] = hex_to_rgb(color_reference[max(color_reference.keys())])
     for state, hex in color_reference.items():
         X_colors[X == state, :] = hex_to_rgb(hex)
     return X_colors

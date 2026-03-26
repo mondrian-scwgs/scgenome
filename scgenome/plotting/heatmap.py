@@ -24,7 +24,6 @@ def plot_cell_cn_matrix(
         cell_order_fields=(),
         ax=None,
         raw=False,
-        max_cn=13,
         vmin=None,
         vmax=None,
         cmap=None,
@@ -45,8 +44,6 @@ def plot_cell_cn_matrix(
         existing axis to plot into, by default None
     raw : bool, optional
         raw plotting, no integer color map, by default False
-    max_cn : int, optional
-        clip cn at max value, raw=False only, by default 13
     vmin, vmax : float, optional
         for raw=True, vmin and vmax define the data range that the colormap covers, see `matplotlib.pyplot.imshow`
     cmap : str, optional
@@ -104,11 +101,6 @@ def plot_cell_cn_matrix(
         X = adata.layers[layer_name].copy()
     else:
         X = adata.X.copy()
-
-    X = np.nan_to_num(X, nan=0)
-
-    if not raw and max_cn is not None:
-        X[X > max_cn] = max_cn
 
     if not raw:
         X_colors = cn_colors.map_cn_colors(X)
@@ -306,7 +298,6 @@ def plot_cell_cn_matrix_fig(
         vmin=None,
         vmax=None,
         cmap=None,
-        max_cn=13,
         show_cell_ids=False,
         show_subsets=False,
         style='black'):
@@ -332,8 +323,6 @@ def plot_cell_cn_matrix_fig(
         for raw=True, vmin and vmax define the data range that the colormap covers, see `matplotlib.pyplot.imshow`
     cmap : str, optional
         matplotlib colormap name, only used if raw=True
-    max_cn : int, optional
-        clip cn at max value, by default 13
     show_cell_ids : bool, optional
         show cell ids on heatmap axis, by default False
     show_subsets : bool, optional
@@ -471,7 +460,7 @@ def plot_cell_cn_matrix_fig(
         adata, layer_name=layer_name,
         cell_order_fields=cell_order_fields,
         ax=heatmap_ax, raw=raw, vmin=vmin, vmax=vmax, cmap=cmap,
-        max_cn=max_cn, show_cell_ids=show_cell_ids,
+        show_cell_ids=show_cell_ids,
         style=style)
 
     adata = g['adata']
