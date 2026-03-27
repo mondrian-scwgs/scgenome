@@ -348,3 +348,13 @@ def bin_width_weighted_mean(df: DataFrame) -> float:
     return weighted_mean(values, widths)
 
 
+def intersect_positions(adata: AnnData, positions: DataFrame):
+    """ Compute positional anndata from anndata of genomic bins.
+
+    Parameters
+    ----------
+    adata : AnnData
+        anndata with genomic bins as var index
+    positions : DataFrame
+        table of positions with columns `chr`, `position`
+    """
