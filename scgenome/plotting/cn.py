@@ -306,7 +306,7 @@ def plot_cn_profile(
     cn_data = get_obs_data(
         adata,
         obs_id,
-        ['chr', 'start'],
+        ['chr', 'start', 'end'],
         layer_names=layers)
 
     return plot_profile(
