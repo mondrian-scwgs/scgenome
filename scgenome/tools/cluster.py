@@ -3,6 +3,7 @@ import sklearn.cluster
 import sklearn.ensemble
 import sklearn.mixture
 import sklearn.preprocessing
+import scipy.spatial
 import umap
 import pandas as pd
 import numpy as np
