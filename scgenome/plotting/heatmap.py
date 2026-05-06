@@ -13,7 +13,6 @@ from matplotlib.figure import Figure
 from matplotlib.patches import Patch
 import matplotlib.cm
 
-import scgenome.cnplot
 import scgenome.refgenome
 from . import cn_colors
 
@@ -79,10 +78,11 @@ def plot_cell_cn_matrix(
         cmap = 'viridis'
 
     # Order the chromosomes
-    chr_start = adata.var.reset_index().merge(scgenome.refgenome.info.chromosome_info[['chr', 'chr_index']], how='left')
+    genome_info = scgenome.refgenome.get_genome_info(adata)
+    chr_start = adata.var.reset_index().merge(genome_info.chromosome_info[['chr', 'chr_index']], how='left')
     if chr_start['chr_index'].isnull().any():
         chromosomes = adata.var['chr'].astype(str).values
-        raise ValueError(f'mismatching chromosomes {chromosomes} and {scgenome.refgenome.info.chromosomes}')
+        raise ValueError(f'mismatching chromosomes {chromosomes} and {genome_info.chromosomes}')
     chr_start = chr_start[['start', 'chr_index']].values
     genome_ordering = np.lexsort(chr_start.transpose())
 
@@ -115,7 +115,7 @@ def plot_cell_cn_matrix(
     chrom_sizes = chrom_boundaries[1:] - chrom_boundaries[:-1]
     chrom_mids = chrom_boundaries[:-1] + chrom_sizes / 2
     ordered_mat_chrom_idxs = mat_chrom_idxs[np.where(np.array([1] + list(np.diff(mat_chrom_idxs))) != 0)]
-    chrom_names = np.array(scgenome.refgenome.info.plot_chromosomes)[ordered_mat_chrom_idxs]
+    chrom_names = np.array(genome_info.plot_chromosomes)[ordered_mat_chrom_idxs]
 
     ax.set_xticks(chrom_mids - 0.5)
     ax.set_xticklabels(chrom_names, fontsize='6')

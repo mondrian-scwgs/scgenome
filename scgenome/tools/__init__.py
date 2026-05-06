@@ -1,5 +1,5 @@
 
-from .cluster import cluster_cells, cluster_cells, detect_outliers, aggregate_clusters_hmmcopy, aggregate_clusters, compute_umap
+from .cluster import cluster_cells, detect_outliers, aggregate_clusters_hmmcopy, aggregate_clusters, compute_umap
 from .pca import pca_loadings
 from .sorting import sort_cells, sort_clusters
 from .binfeat import count_gc, mean_from_bigwig, add_cyto_giemsa_stain

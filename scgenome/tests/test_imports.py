@@ -4,8 +4,6 @@ def test_imports():
     import scgenome.pl
     import scgenome.pp
     import scgenome.tl
-    import scgenome.cnplot
-    import scgenome.cncluster
     import scgenome.refgenome
     import scgenome.plotting.heatmap
     import scgenome.preprocessing.transform

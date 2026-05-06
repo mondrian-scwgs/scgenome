@@ -12,13 +12,46 @@ from natsort import natsorted
 from anndata import AnnData
 from typing import Dict, Any, Union, Iterable
 
-import scgenome.cncluster
 import scgenome.preprocessing.transform
+from scgenome._validate import validate_adata
+
+
+def _compute_kmean_bic(kmeans, X):
+    """ Computes the BIC metric for a given k means clustering
+
+    Args:
+        kmeans: a fitted kmeans clustering object
+        X: data for which to calculate bic
+    
+    Returns:
+        float: bic
+    
+    Reference: https://stats.stackexchange.com/questions/90769/using-bic-to-estimate-the-number-of-k-in-kmeans
+    """
+    centers = [kmeans.cluster_centers_]
+    labels = kmeans.labels_
+    n_clusters = kmeans.n_clusters
+    cluster_sizes = np.bincount(labels)
+    N, d = X.shape
+
+    # Compute variance for all clusters
+    cl_var = (1.0 / (N - n_clusters) / d) * sum(
+        [sum(scipy.spatial.distance.cdist(X[np.where(labels == i)], [centers[0][i]],
+                                          'euclidean') ** 2) for i in range(n_clusters)])
+
+    const_term = 0.5 * n_clusters * np.log(N) * (d + 1)
+
+    bic = np.sum([cluster_sizes[i] * np.log(cluster_sizes[i]) -
+                  cluster_sizes[i] * np.log(N) -
+                  ((cluster_sizes[i] * d) / 2) * np.log(2 * np.pi * cl_var) -
+                  ((cluster_sizes[i] - 1) * d / 2) for i in range(n_clusters)]) - const_term
+
+    return bic
 
 
 def _kmeans_bic(X, k):
     model = sklearn.cluster.KMeans(n_clusters=k, init='k-means++', random_state=100).fit(X)
-    bic = scgenome.cncluster.compute_bic(model, X)
+    bic = _compute_kmean_bic(model, X)
     labels = model.labels_
 
     return labels, bic
@@ -49,7 +82,7 @@ def cluster_cells(
     adata : AnnData
         copy number data
     layer_name : str, optional
-        layer with copy number data to plot, None for X, by default 'state'
+        layer with copy number data to plot, None for X, by default 'copy'
     method : str, optional
         clustering method, by default 'kmeans_bic'
     min_k : int, optional
@@ -60,12 +93,23 @@ def cluster_cells(
         subset of cells to cluster, by default None
     bin_ids : str, optional
         subset of bins to cluster, by default None
-    standarize : bool
-        standardize the data prior to outlier detection, by default False
+    standardize : bool
+        standardize the data prior to clustering, by default False
+
     Returns
     -------
     AnnData
         copy number data with additional `cluster_id` and `cluster_size` columns
+
+    Reads
+    -----
+    adata.layers[layer_name] : copy number matrix
+
+    Modifies
+    --------
+    adata.obs['cluster_id'] : cluster assignment per cell
+    adata.obs['cluster_size'] : number of cells in each cluster
+    adata.uns['clustering'] : dict with clustering parameters
 
     Examples
     -------
@@ -89,6 +133,7 @@ def cluster_cells(
     Categories (3, int64): [0, 1, 2]
 
     """
+    validate_adata(adata, caller='cluster_cells')
     if cell_ids is None:
         cell_ids = adata.obs.index
 
@@ -162,7 +207,7 @@ def detect_outliers(
         adata: AnnData,
         layer_name: Union[None, str, Iterable[Union[None,str]]]='copy',
         method: str='isolation_forest',
-        standarize: bool=False,
+        standardize: bool=False,
     ) -> AnnData:
     """ Detect outlier cells by copy number.
 
@@ -174,7 +219,7 @@ def detect_outliers(
         layer with copy number data to use for outlier detection, None for X, by default 'copy'
     method : str, optional
         outlier method, by default 'isolation_forest'
-    standarize : bool
+    standardize : bool
         standardize the data prior to outlier detection, by default False
 
     Returns
@@ -182,6 +227,14 @@ def detect_outliers(
     AnnData
         copy number data with additional `is_outlier` column
 
+    Reads
+    -----
+    adata.layers[layer_name] : copy number matrix
+
+    Modifies
+    --------
+    adata.obs['is_outlier'] : 1 if outlier, 0 otherwise
+    adata.uns['outliers'] : dict with outlier detection parameters
     """
     def __get_layer(layer_name):
         if layer_name is not None:
@@ -196,7 +249,7 @@ def detect_outliers(
 
     X = scgenome.preprocessing.transform.fill_missing(X)
 
-    if standarize:
+    if standardize:
         X = sklearn.preprocessing.StandardScaler().fit_transform(X)
 
     if method == 'isolation_forest':
@@ -215,7 +268,7 @@ def detect_outliers(
     adata.uns['outliers']['params'] = dict(
         method='isolation_forest',
         layer_name=layer_name,
-        standarize=standarize,
+        standardize=standardize,
     )
 
     return adata
@@ -344,7 +397,7 @@ def compute_umap(
         min_dist: float=0.1,
         metric: str='euclidean',
     ) -> AnnData:
-    """ Cluster cells by copy number.
+    """ Compute UMAP embedding of cells by copy number.
 
     Parameters
     ----------
@@ -363,7 +416,16 @@ def compute_umap(
     Returns
     -------
     AnnData
-        copy number data with additional `umap_1`, `umap_2` columns
+        copy number data with UMAP coordinates added to obs
+
+    Reads
+    -----
+    adata.layers[layer_name] : copy number matrix
+
+    Modifies
+    --------
+    adata.obs['UMAP1'] : UMAP first component
+    adata.obs['UMAP2'] : UMAP second component
     """
 
     if layer_name is not None:

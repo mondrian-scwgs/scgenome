@@ -3,6 +3,7 @@ import numpy as np
 import scipy.stats
 
 from anndata import AnnData
+from scgenome._validate import validate_adata
 
 
 
@@ -18,7 +19,6 @@ def calculate_filter_metrics(
         quality_score_threshold=0.75,
         read_count_threshold=500000,
         copy_state_diff_threshold=1.,
-        inplace = False,
     ) -> AnnData:
     """ Calculate additional filtering metrics to be used by other filtering methods.
 
@@ -30,40 +30,36 @@ def calculate_filter_metrics(
         The minimum quality to set to keep, by default 0.75
     read_count_threshold : int, optional
         The minimum total mapped reads from hmmcopy to set for keeping, by default 500000
-    copy_state_diff_threshold : [type], optional
+    copy_state_diff_threshold : float, optional
         Minimum copy-state difference threshold to set to keep, by default 1.
-    inplace : bool, optional
-        Whether to modify passed in AnnData, by default False
 
     Returns
     -------
     AnnData
-        AnnData with modified obs if not inplace, otherise, None
+        input AnnData with filter columns added to obs
 
-    Note
-    ----
+    Reads
+    -----
+    adata.obs['quality'] : quality score per cell (optional)
+    adata.obs['total_mapped_reads_hmmcopy'] : total reads per cell (optional)
+    adata.obs['is_s_phase'] : S-phase indicator per cell (optional)
+    adata.layers['copy'] : continuous copy number values
+    adata.layers['state'] : integer copy number states
 
-    The following properties are changed:
-    - AnnData.obs.filter_quality
-    - AnnData.obs.filter_reads
-    - AnnData.obs.filter_copy_state_diff
-    
-    If is_s_phase is a property of AnnData
-        AnnData.obs.filter_is_s_phase
-        
-    AnnData.obs.copy_state_diff
-    AnnData.obs.copy_state_diff_mean
+    Modifies
+    --------
+    adata.obs['filter_quality'] : True if cell passes quality threshold
+    adata.obs['filter_reads'] : True if cell passes read count threshold
+    adata.obs['filter_copy_state_diff'] : True if cell passes copy-state diff threshold
+    adata.obs['filter_is_s_phase'] : True if cell is not in S-phase (optional)
+    adata.obsm['copy_state_diff'] : absolute difference between copy and state
+    adata.obsm['copy_state_diff_mean'] : mean copy-state difference per cell
     """
-    if not inplace:
-        ndad = adata.copy()
-        
-        return calculate_filter_metrics(
-            ndad,
-            quality_score_threshold,
-            read_count_threshold,
-            copy_state_diff_threshold,
-            inplace = True,
-        )
+    validate_adata(
+        adata,
+        require_layers=['copy', 'state'],
+        caller='calculate_filter_metrics',
+    )
 
     # Filter Quality and Filter Reads
     if 'quality' in adata.obs.columns:
@@ -94,7 +90,6 @@ def calculate_filter_metrics(
 def filter_cells(
         adata: AnnData,
         filters = _default_filters,
-        inplace = False,
     ) -> AnnData:
     """
     Filter poor quality cells based on the filters provided.
@@ -102,26 +97,24 @@ def filter_cells(
     Parameters
     -------
     adata : AnnData
-        AnnData to preform operation with
+        AnnData to perform operation with
     filters : list, optional
         Filters to apply. Keeps cells where filters are true, by default _default_filters
-    inplace
-        Whether to modify passed in AnnData. If False, returns new AnnData.
 
     Returns
     -------
     AnnData
-        filtered copy number data
-    """
+        filtered copy number data (subset of input cells)
 
-    if not inplace:
-        adata = adata.copy()
-        
-        return filter_cells(
-            adata,
-            filters,
-            inplace = True,
-        )
+    Reads
+    -----
+    adata.obs[filters] : boolean filter columns (from calculate_filter_metrics)
+
+    Modifies
+    --------
+    Subsets adata to cells passing all filter criteria.
+    """
+    validate_adata(adata, caller='filter_cells')
 
     # Ensure cnfilter.calculate_filter_metrics has been called
     for filter_option in filters:

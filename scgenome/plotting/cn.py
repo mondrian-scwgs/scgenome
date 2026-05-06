@@ -15,18 +15,20 @@ from scgenome.plotting import cn_colors
 from scgenome.tools.getters import get_obs_data
 
 
-def genome_axis_plot(data, plot_function, position_columns, **kwargs):
-    data = data.merge(refgenome.info.chromosome_info)
+def genome_axis_plot(data, plot_function, position_columns, genome=None, **kwargs):
+    genome_info = refgenome.get_genome_info(genome=genome)
+    data = data.merge(genome_info.chromosome_info)
     for columns in position_columns:
         data[columns] = data[columns] + data['chromosome_start']
 
     plot_function(data=data, **kwargs)
 
 
-def setup_genome_xaxis_lims(ax, chromosome=None, start=None, end=None):
+def setup_genome_xaxis_lims(ax, chromosome=None, start=None, end=None, genome=None):
+    genome_info = refgenome.get_genome_info(genome=genome)
     if chromosome is not None:
-        chromosome_start = refgenome.info.chromosome_info.set_index('chr').loc[chromosome, 'chromosome_start']
-        chromosome_end = refgenome.info.chromosome_info.set_index('chr').loc[chromosome, 'chromosome_end']
+        chromosome_start = genome_info.chromosome_info.set_index('chr').loc[chromosome, 'chromosome_start']
+        chromosome_end = genome_info.chromosome_info.set_index('chr').loc[chromosome, 'chromosome_end']
 
         if start is not None:
             plot_start = chromosome_start + start
@@ -40,14 +42,15 @@ def setup_genome_xaxis_lims(ax, chromosome=None, start=None, end=None):
 
     else:
         plot_start = 0
-        plot_end = refgenome.info.chromosome_info['chromosome_end'].max()
+        plot_end = genome_info.chromosome_info['chromosome_end'].max()
 
     ax.set_xlim((plot_start-0.5, plot_end+0.5))
 
 
-def setup_genome_xaxis_ticks(ax, chromosome=None, start=None, end=None, major_spacing=2e7, minor_spacing=1e6, chromosome_names=None):
+def setup_genome_xaxis_ticks(ax, chromosome=None, start=None, end=None, major_spacing=2e7, minor_spacing=1e6, chromosome_names=None, genome=None):
+    genome_info = refgenome.get_genome_info(genome=genome)
     if chromosome_names is None:
-        chromosome_names = refgenome.info.chromosome_info.set_index('chr')['chr_plot']
+        chromosome_names = genome_info.chromosome_info.set_index('chr')['chr_plot']
     
     if chromosome is not None:
         if major_spacing is None:
@@ -56,10 +59,10 @@ def setup_genome_xaxis_ticks(ax, chromosome=None, start=None, end=None, major_sp
         if minor_spacing is None:
             minor_spacing = 1e6
 
-        chromosome_length = refgenome.info.chromosome_info.set_index('chr').loc[
+        chromosome_length = genome_info.chromosome_info.set_index('chr').loc[
             chromosome, 'chromosome_length']
-        chromosome_start = refgenome.info.chromosome_info.set_index('chr').loc[chromosome, 'chromosome_start']
-        chromosome_end = refgenome.info.chromosome_info.set_index('chr').loc[chromosome, 'chromosome_end']
+        chromosome_start = genome_info.chromosome_info.set_index('chr').loc[chromosome, 'chromosome_start']
+        chromosome_end = genome_info.chromosome_info.set_index('chr').loc[chromosome, 'chromosome_end']
 
         xticks = np.arange(0, chromosome_length, major_spacing)
         xticklabels = ['{0:d}M'.format(int(x / 1e6)) for x in xticks]
@@ -79,13 +82,13 @@ def setup_genome_xaxis_ticks(ax, chromosome=None, start=None, end=None, major_sp
             ax.set_xlim(right=chromosome_start+end)
 
     else:
-        ax.set_xticks([0] + refgenome.info.chromosome_info['chromosome_end'].values.tolist())
+        ax.set_xticks([0] + genome_info.chromosome_info['chromosome_end'].values.tolist())
         ax.set_xticklabels([])
 
         ax.xaxis.set_minor_locator(
-            matplotlib.ticker.FixedLocator(refgenome.info.chromosome_info['chromosome_mid'])
+            matplotlib.ticker.FixedLocator(genome_info.chromosome_info['chromosome_mid'])
         )
-        ax.xaxis.set_minor_formatter(matplotlib.ticker.FixedFormatter([chromosome_names.get(c, c) for c in refgenome.info.chromosomes]))
+        ax.xaxis.set_minor_formatter(matplotlib.ticker.FixedFormatter([chromosome_names.get(c, c) for c in genome_info.chromosomes]))
 
 
 def setup_squash_yaxis(ax):
@@ -523,7 +526,8 @@ def plot_rearrangement_arcs(
                 continue
         else:
             try:
-                chromosome_info = refgenome.info.chromosome_info.set_index('chr')
+                genome_info = refgenome.get_genome_info()
+                chromosome_info = genome_info.chromosome_info.set_index('chr')
                 if chrom1 in chromosome_info.index:
                     pos1 = pos1 + chromosome_info.loc[chrom1, 'chromosome_start']
                 if chrom2 in chromosome_info.index:

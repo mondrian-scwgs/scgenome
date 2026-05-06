@@ -11,10 +11,12 @@ setup(
     packages=find_packages(),
     install_requires=[
         'anndata',
+        'biopython',
         'Click',
+        'csverve',
         'hdbscan',
         'matplotlib',
-        'nose',
+        'natsort',
         'numba',
         'numpy',
         'pandas',

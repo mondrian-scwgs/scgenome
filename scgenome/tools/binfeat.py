@@ -79,22 +79,24 @@ def count_gc(bins, genome_fasta, column_name='gc', proportion=False):
     return data
 
 
-def add_cyto_giemsa_stain(bins):
+def add_cyto_giemsa_stain(bins, genome=None):
     """ Add bin specific giesma stain values
 
     Parameters
     ----------
     bins : pandas.DataFrame
         dataframe with columns 'chr', 'start', 'end' for which to add giesma stain values
+    genome : str or RefGenomeInfo, optional
+        genome version, by default uses global setting
 
     Returns
     -------
     pandas.DataFrame
         output dataframe with columns 'chr', 'start', 'end' and additional column for giesma stain values
     """    
-
+    genome_info = scgenome.refgenome.get_genome_info(genome=genome)
     bins_pr = dataframe_to_pyranges(bins.rename_axis('_index').reset_index())
-    cyto_pr = dataframe_to_pyranges(scgenome.refgenome.info.cytobands)
+    cyto_pr = dataframe_to_pyranges(genome_info.cytobands)
 
     intersect_1 = bins_pr.intersect(cyto_pr)
     intersect_2 = cyto_pr.intersect(bins_pr)

@@ -56,21 +56,23 @@ def pyranges_to_dataframe(data: PyRanges) -> DataFrame:
     return data
 
 
-def create_bins_pr(binsize: int) -> PyRanges:
+def create_bins_pr(binsize: int, genome=None) -> PyRanges:
     """ Create a regular binning of the genome
 
     Parameters
     ----------
     binsize : int
         size of bins
+    genome : str or RefGenomeInfo, optional
+        genome version, by default uses global setting
 
     Returns
     -------
     PyRanges
         regular bins tiled across the genome
     """    
-    
-    chromsizes = scgenome.refgenome.info.chromosome_info[['chr', 'chromosome_length']].rename(
+    genome_info = scgenome.refgenome.get_genome_info(genome=genome)
+    chromsizes = genome_info.chromosome_info[['chr', 'chromosome_length']].rename(
         columns={'chr': 'Chromosome', 'chromosome_length': 'End'}).assign(Start=0)[['Chromosome', 'Start', 'End']]
 
     chromsizes = pr.PyRanges(chromsizes)
@@ -80,20 +82,22 @@ def create_bins_pr(binsize: int) -> PyRanges:
     return bins
 
 
-def create_bins(binsize: int) -> DataFrame:
+def create_bins(binsize: int, genome=None) -> DataFrame:
     """ Create a regular binning of the genome
 
     Parameters
     ----------
     binsize : int
         size of bins
+    genome : str or RefGenomeInfo, optional
+        genome version, by default uses global setting
 
     Returns
     -------
     DataFrame
         regular bins tiled across the genome
     """
-    return pyranges_to_dataframe(create_bins_pr(binsize=binsize))
+    return pyranges_to_dataframe(create_bins_pr(binsize=binsize, genome=genome))
 
 
 def rebin_agg_df(data: DataFrame, intersect: DataFrame, agg_f: dict) -> DataFrame:

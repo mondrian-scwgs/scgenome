@@ -15,7 +15,7 @@ def sort_cells(
         layer_name: Union[None, str, Iterable[Union[None,str]]]='copy',
         cell_ids: Iterable[str]=None,
         bin_ids: Iterable[str]=None,
-        standarize: bool=False,
+        standardize: bool=False,
     ) -> AnnData:
     """ Sort cells by hierarchical clustering on copy number values.
 
@@ -29,13 +29,21 @@ def sort_cells(
         subset of cells to cluster, by default None
     bin_ids : str, optional
         subset of bins to cluster, by default None
-    standarize : bool
+    standardize : bool
         standardize the data prior to sorting, by default False
 
     Returns
     -------
     AnnData
         copy number data with cell_order column added to obs
+
+    Reads
+    -----
+    adata.layers[layer_name] : copy number matrix
+
+    Modifies
+    --------
+    adata.obs['cell_order'] : integer ordering of cells by hierarchical clustering
     """
     if cell_ids is None:
         cell_ids = adata.obs.index
@@ -62,7 +70,7 @@ def sort_cells(
 
     X = scgenome.preprocessing.transform.fill_missing(X)
 
-    if standarize:
+    if standardize:
         X = sklearn.preprocessing.StandardScaler().fit_transform(X)
 
     Y = sch.linkage(dst.pdist(X, 'cityblock'), method='complete')
@@ -86,9 +94,9 @@ def sort_clusters(
         agg_layers: Dict=None,
         cell_ids: Iterable[str]=None,
         bin_ids: Iterable[str]=None,
-        standarize: bool=False,
+        standardize: bool=False,
     ) -> AnnData:
-    """ Sort cells by hierarchical clustering on copy number values.
+    """ Sort clusters by hierarchical clustering on aggregated copy number values.
 
     Parameters
     ----------
@@ -106,13 +114,22 @@ def sort_clusters(
         subset of cells to cluster, by default None
     bin_ids : str, optional
         subset of bins to cluster, by default None
-    standarize : bool
+    standardize : bool
         standardize the data prior to sorting, by default False
 
     Returns
     -------
     AnnData
-        copy number data with cell_order column added to obs
+        copy number data with cluster_order column added to obs
+
+    Reads
+    -----
+    adata.layers[layer_name] : copy number matrix
+    adata.obs[cluster_col] : cluster assignment per cell
+
+    Modifies
+    --------
+    adata.obs['cluster_order'] : integer ordering of clusters
     """
 
     if cell_ids is None:
@@ -127,7 +144,7 @@ def sort_clusters(
     adata_clusters = sort_cells(
         adata_clusters,
         layer_name=layer_name,
-        standarize=standarize)
+        standardize=standardize)
 
     adata.obs['cluster_order'] = np.nan
     adata.obs.loc[cell_ids, 'cluster_order'] = pd.Series(

@@ -70,5 +70,44 @@ def set_genome_version(version, chromosomes=None, plot_chromosomes=None):
     global info
     info = RefGenomeInfo(version, chromosomes=chromosomes, plot_chromosomes=plot_chromosomes)
 
+
+def get_genome_info(adata=None, genome=None):
+    """ Resolve genome info from explicit parameter, adata.uns, or global default.
+
+    Resolution order:
+    1. Explicit ``genome`` parameter (str or RefGenomeInfo)
+    2. ``adata.uns['genome']`` if adata is provided
+    3. Module-level global ``info``
+
+    Parameters
+    ----------
+    adata : AnnData, optional
+        AnnData object that may carry genome version in uns['genome']
+    genome : str or RefGenomeInfo, optional
+        Explicit genome version string (e.g. 'hg19', 'grch38', 'mm10') or RefGenomeInfo instance
+
+    Returns
+    -------
+    RefGenomeInfo
+        resolved genome information object
+    """
+    if genome is not None:
+        if isinstance(genome, RefGenomeInfo):
+            return genome
+        return RefGenomeInfo(genome)
+
+    if adata is not None and 'genome' in getattr(adata, 'uns', {}):
+        genome_val = adata.uns['genome']
+        if isinstance(genome_val, RefGenomeInfo):
+            return genome_val
+        return RefGenomeInfo(genome_val)
+
+    if info is None:
+        raise ValueError(
+            "No genome version set. Either pass genome= parameter, "
+            "set adata.uns['genome'], or call scgenome.refgenome.set_genome_version()")
+    return info
+
+
 set_genome_version('hg19')
 
