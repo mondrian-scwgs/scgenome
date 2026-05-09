@@ -3,15 +3,19 @@ import matplotlib.pyplot as plt
 import matplotlib.lines as mlines
 import matplotlib.patches as mpatches
 import matplotlib.transforms as transforms
+import matplotlib.collections as mc
 import numpy as np
 import pandas as pd
 import seaborn as sns
+import anndata as ad
 from anndata import AnnData
 from matplotlib.path import Path
 from pandas import DataFrame
 from scgenome import refgenome
 from scipy.sparse import issparse
 from scgenome.plotting import cn_colors
+from scgenome.plotting.cn_colors import allele_state_colors
+from scgenome.tools.cluster import aggregate_pseudobulk
 from scgenome.tools.getters import get_obs_data
 
 
@@ -111,6 +115,7 @@ def plot_profile(
         hue=None,
         ax=None,
         palette=None,
+        hue_order=None,
         chromosome=None,
         start=None,
         end=None,
@@ -134,6 +139,8 @@ def plot_profile(
         existing axess to plot into, by default None
     palette : str, optional
         color palette passed to sns.scatterplot
+    hue_order : list, optional
+        order of hue levels, by default None
     chromosome : str, optional
         single chromosome plot, by default None
     start : int, optional
@@ -177,8 +184,12 @@ def plot_profile(
     if 's' not in kwargs:
         kwargs['s'] = 5
 
+    if 'rasterized' not in kwargs:
+        kwargs['rasterized'] = True
+
     if palette is None and hue is not None:
         palette = cn_colors.color_reference
+        hue_order = cn_colors.color_reference.keys()
 
     if chromosome is not None:
         data = data[data['chr'] == chromosome]
@@ -197,6 +208,7 @@ def plot_profile(
         y=y,
         hue=hue,
         palette=palette,
+        hue_order=hue_order,
         ax=ax,
         clip_on=False,
         **kwargs)
@@ -231,100 +243,6 @@ def plot_profile(
     ax.yaxis.tick_left()
 
     return ax
-
-
-def plot_cn_profile(
-        adata: AnnData,
-        obs_id: str,
-        value_layer_name=None,
-        state_layer_name=None,
-        ax=None,
-        palette=None,
-        chromosome=None,
-        start=None,
-        end=None,
-        squashy=False,
-        tick_major_spacing=None,
-        tick_minor_spacing=None,
-        **kwargs
-):
-    """Plot scatter points of copy number across the genome or a chromosome.
-
-    Parameters
-    ----------
-    adata : AnnData
-        copy number data
-    obs_id : str
-        observation to plot
-    value_layer_name : str, optional
-        layer with values for y axis, None for X, by default None
-    state_layer_name : str, optional
-        layer with states for colors, None for no color by state, by default None
-    ax : matplotlib.axes.Axes, optional
-        existing axess to plot into, by default None
-    palette : str, optional
-        color palette passed to sns.scatterplot
-    chromosome : str, optional
-        single chromosome plot, by default None
-    start : int, optional
-        start of plotting region
-    end : int, optional
-        end of plotting region
-    squashy : bool, optional
-        compress y axis, by default False
-    rawy : bool, optional
-        raw data on y axis, by default False
-    tick_major_spacing : int, optional
-        major tick spacing, by default 
-    tick_minor_spacing : int, optional
-        minor tick spacing, by default 1e6
-    **kwargs :
-        kwargs for sns.scatterplot
-
-    Returns
-    -------
-    matplotlib.axes.Axes
-        Axes used for plotting
-
-    Examples
-    -------
-
-    .. plot::
-        :context: close-figs
-
-        import scgenome
-        adata = scgenome.datasets.OV2295_HMMCopy_reduced()
-        scgenome.pl.plot_cn_profile(adata, 'SA922-A90554B-R27-C43', value_layer_name='copy', state_layer_name='state')
-
-    """
-
-    if value_layer_name is None:
-        value_layer_name = '_X'
-
-    layers = {value_layer_name}
-
-    if state_layer_name is not None:
-        layers.add(state_layer_name)
-
-    cn_data = get_obs_data(
-        adata,
-        obs_id,
-        ['chr', 'start', 'end'],
-        layer_names=layers)
-
-    return plot_profile(
-        cn_data,
-        y=value_layer_name,
-        hue=state_layer_name,
-        ax=ax,
-        palette=palette,
-        chromosome=chromosome,
-        start=start,
-        end=end,
-        squashy=squashy,
-        tick_major_spacing=tick_major_spacing,
-        tick_minor_spacing=tick_minor_spacing,
-        **kwargs)
 
 
 def plot_rearrangement_arcs(
@@ -741,3 +659,437 @@ def plot_rearrangement_arcs(
         artists.append(txt_minus_oov)
     
     return artists
+
+
+def plot_cn_rect(
+        data,
+        obs_id=None,
+        ax=None,
+        y='state',
+        hue='state',
+        chromosome=None,
+        cmap=None,
+        vmin=None,
+        vmax=None,
+        color=None,
+        offset=0,
+        rect_kws=None,
+        fill_gaps=True):
+    """Plot copy number as colored rectangles on a genome axis.
+
+    Parameters
+    ----------
+    data : pandas.DataFrame or anndata.AnnData
+        data containing copy number information
+    obs_id : str, optional
+        observation ID to extract data from an AnnData object
+    ax : matplotlib.axes.Axes, optional
+        axes to plot on, by default current axes
+    y : str, optional
+        column for y-coordinate of rectangles, by default 'state'
+    hue : str, optional
+        column for coloring rectangles, by default 'state'
+    chromosome : str, optional
+        chromosome to plot, by default all chromosomes
+    cmap : str or matplotlib.colors.Colormap, optional
+        colormap for coloring rectangles
+    vmin : float, optional
+        minimum value for colormap
+    vmax : float, optional
+        maximum value for colormap
+    color : color, optional
+        single color for all rectangles
+    offset : float, optional
+        y offset for rectangles, by default 0
+    rect_kws : dict, optional
+        additional keyword arguments for patches.Rectangle
+    fill_gaps : bool, optional
+        fill gaps between segments, by default True
+
+    Returns
+    -------
+    matplotlib.axes.Axes
+        axes with plotted rectangles
+    """
+    import matplotlib.cm as cm
+
+    if ax is None:
+        ax = plt.gca()
+
+    if rect_kws is None:
+        rect_kws = dict()
+
+    rect_kws.setdefault('height', 0.7)
+    rect_kws.setdefault('linewidth', 0.)
+
+    # Check data is an adata
+    if isinstance(data, ad.AnnData):
+        assert obs_id is not None
+
+        layers = {y}
+        if hue is not None:
+            layers.add(hue)
+
+        data = get_obs_data(
+            data,
+            obs_id,
+            layer_names=list(layers),
+        )
+
+    if fill_gaps:
+        data = data.sort_values(['chr', 'start'])
+
+        for chrom_, df in data.groupby('chr'):
+            data.loc[df.index[:-1], 'end'] = data.loc[df.index[1:], 'start'].values
+            data.loc[df.index[0], 'start'] = 0
+            data.loc[df.index[-1], 'end'] = refgenome.info.chromosome_info.set_index('chr').loc[chrom_, 'chromosome_length']
+
+    if chromosome is not None:
+        data = data[data['chr'] == chromosome]
+
+    if hue is not None:
+        if cmap is None:
+            data['color'] = data[hue].map(cn_colors.color_reference)
+        else:
+            if vmin is None:
+                vmin = data[hue].min()
+            if vmax is None:
+                vmax = data[hue].max()
+            colormap = cm.get_cmap(cmap) if isinstance(cmap, str) else cmap
+            data['color'] = data[hue].apply(
+                lambda a: colormap((a - vmin) / (vmax - vmin)) if vmax != vmin else colormap(0.5))
+    elif color is not None:
+        data['color'] = color
+
+    def plot_rect(data, ax=None):
+        rectangles = []
+        for idx, row in data.iterrows():
+            width = row['end'] - row['start']
+            lower_left_x = row['start']
+            lower_left_y = row[y] - (rect_kws['height'] / 2.) + offset
+            rect = mpatches.Rectangle(
+                (lower_left_x, lower_left_y),
+                width,
+                facecolor=row['color'],
+                **rect_kws)
+            rectangles.append(rect)
+
+        pc = mc.PatchCollection(rectangles, match_original=True, zorder=2)
+        ax.add_collection(pc)
+
+    genome_axis_plot(
+        data,
+        plot_rect,
+        ('start', 'end'),
+        ax=ax,
+    )
+
+    ax.set_ylim((data[y].min() - 0.5, data[y].max() + 0.5))
+    setup_genome_xaxis_ticks(ax, chromosome=chromosome)
+    setup_genome_xaxis_lims(ax, chromosome=chromosome)
+
+    ax.spines[['right', 'top']].set_visible(False)
+
+    return ax
+
+
+def plot_cell_tcn(
+        adata: AnnData,
+        cell_id: str,
+        y='copy',
+        hue='state',
+        ax=None,
+        palette=None,
+        chromosome=None,
+        start=None,
+        end=None,
+        squashy=True,
+        tick_major_spacing=None,
+        tick_minor_spacing=None,
+        **kwargs
+):
+    """Plot a cell-specific total copy number profile.
+
+    Extracts data for a single cell from an AnnData object and plots copy number
+    as a scatter plot across the genome or a single chromosome. Points are colored
+    by copy number state.
+
+    Parameters
+    ----------
+    adata : anndata.AnnData
+        copy number data
+    cell_id : str
+        cell identifier from adata.obs.index
+    y : str, optional
+        layer with values for y axis, None for X, by default 'copy'
+    hue : str, optional
+        layer with states for colors, None for no color by state, by default 'state'
+    ax : matplotlib.axes.Axes, optional
+        axes to plot on, by default current axes
+    palette : str or dict, optional
+        color palette passed to sns.scatterplot
+    chromosome : str, optional
+        single chromosome to plot, by default all
+    start : int, optional
+        start of plotting region
+    end : int, optional
+        end of plotting region
+    squashy : bool, optional
+        compress y axis, by default True
+    tick_major_spacing : int, optional
+        major tick spacing
+    tick_minor_spacing : int, optional
+        minor tick spacing
+    **kwargs : dict
+        additional arguments passed to plot_profile
+
+    Returns
+    -------
+    matplotlib.axes.Axes
+        axes used for plotting
+
+    Examples
+    -------
+
+    .. plot::
+        :context: close-figs
+
+        import scgenome
+        adata = scgenome.datasets.OV2295_HMMCopy_reduced()
+        scgenome.pl.plot_cell_tcn(adata, 'SA922-A90554B-R27-C43')
+
+    """
+    if ax is None:
+        ax = plt.gca()
+
+    if y is None:
+        y = '_X'
+
+    layers = {y}
+    if hue is not None:
+        layers.add(hue)
+
+    cn_data = get_obs_data(
+        adata,
+        cell_id,
+        ['chr', 'start', 'end'],
+        layer_names=layers)
+
+    plot_profile(
+        cn_data,
+        y=y,
+        hue=hue,
+        ax=ax,
+        palette=palette,
+        chromosome=chromosome,
+        start=start,
+        end=end,
+        squashy=squashy,
+        tick_major_spacing=tick_major_spacing,
+        tick_minor_spacing=tick_minor_spacing,
+        **kwargs)
+
+    ax.spines[['right', 'top']].set_visible(False)
+
+    sns.move_legend(
+        ax, 'upper left', prop={'size': 8}, markerscale=3, bbox_to_anchor=(1, 1),
+        labelspacing=0.4, handletextpad=0, columnspacing=0.5,
+        ncol=3, title='Total CN state', title_fontsize=10, frameon=False)
+
+    ax.grid(ls=':', lw=0.5, zorder=-100, which='major', axis='y')
+    ax.set_axisbelow(True)
+
+    return ax
+
+
+def plot_cell_ascn(adata, cell_id, ax=None, chromosome=None, **kwargs):
+    """Plot BAF colored by allele-specific copy number state.
+
+    Extracts data for a single cell from an AnnData object and plots B-allele
+    frequency as a scatter plot across the genome or a single chromosome. Points
+    are colored by allele-specific copy number state.
+
+    Parameters
+    ----------
+    adata : anndata.AnnData
+        copy number anndata with layers BAF, A, B, state, copy
+    cell_id : str
+        cell from adata.obs.index to plot
+    ax : matplotlib.axes.Axes, optional
+        axes on which to plot, by default current axes
+    chromosome : str, optional
+        single chromosome to plot, by default all
+    **kwargs : dict
+        additional arguments passed to plot_profile
+
+    Returns
+    -------
+    matplotlib.axes.Axes
+        axes used for plotting
+    """
+    if ax is None:
+        ax = plt.gca()
+
+    plot_data = get_obs_data(
+        adata,
+        cell_id,
+        layer_names=['copy', 'BAF', 'state', 'A', 'B']
+    )
+
+    plot_data['ascn_state'] = 'Balanced'
+    plot_data.loc[plot_data['A'] > plot_data['B'], 'ascn_state'] = 'A-Gained'
+    plot_data.loc[plot_data['B'] > plot_data['A'], 'ascn_state'] = 'B-Gained'
+    plot_data.loc[plot_data['B'] == 0, 'ascn_state'] = 'A-Hom'
+    plot_data.loc[plot_data['A'] == 0, 'ascn_state'] = 'B-Hom'
+
+    plot_profile(
+        plot_data,
+        y='BAF',
+        hue='ascn_state',
+        ax=ax,
+        chromosome=chromosome,
+        palette=allele_state_colors,
+        hue_order=allele_state_colors.keys(),
+        **kwargs,
+    )
+
+    ax.set_ylim(-0.05, 1.05)
+    ax.spines[['right', 'top']].set_visible(False)
+    ax.spines['left'].set_bounds(0, 1)
+
+    sns.move_legend(
+        ax, 'upper left', prop={'size': 8}, markerscale=3, bbox_to_anchor=(1, 1),
+        labelspacing=0.4, handletextpad=0, columnspacing=0.5,
+        ncol=1, title='AS CN state', title_fontsize=10, frameon=False)
+
+    ax.grid(ls=':', lw=0.5, zorder=-100, which='major', axis='y')
+    ax.set_axisbelow(True)
+
+    return ax
+
+
+def plot_pseudobulk_tcn(adata, ax=None, chromosome=None, **kwargs):
+    """Plot pseudobulk total copy number profile.
+
+    Aggregates all cells and plots the consensus total copy number.
+
+    Parameters
+    ----------
+    adata : anndata.AnnData
+        copy number data with layers copy and state
+    ax : matplotlib.axes.Axes, optional
+        axes to plot on, by default current axes
+    chromosome : str, optional
+        single chromosome to plot, by default all
+    **kwargs : dict
+        additional arguments passed to plot_profile
+
+    Returns
+    -------
+    matplotlib.axes.Axes
+        axes used for plotting
+    """
+    plot_data = aggregate_pseudobulk(adata, agg_layers={
+        'copy': np.nanmean,
+        'state': np.nanmedian,
+    })
+
+    if ax is None:
+        ax = plt.gca()
+
+    kwargs.setdefault('alpha', 1.)
+
+    plot_profile(
+        plot_data,
+        y='copy',
+        hue='state',
+        chromosome=chromosome,
+        ax=ax,
+        squashy=True,
+        hue_order=sorted(range(12)),
+        **kwargs)
+
+    ax.spines[['right', 'top']].set_visible(False)
+
+    sns.move_legend(
+        ax, 'upper left', prop={'size': 8}, markerscale=3, bbox_to_anchor=(1, 1),
+        labelspacing=0.4, handletextpad=0, columnspacing=0.5,
+        ncol=3, title='Total CN state', title_fontsize=10, frameon=False)
+
+    ax.grid(ls=':', lw=0.5, zorder=-100, which='major', axis='y')
+    ax.set_axisbelow(True)
+
+    if chromosome is None:
+        setup_genome_xaxis_ticks(
+            ax, chromosome_names=dict(zip(
+                [str(a) for a in range(1, 23)] + ['X'],
+                ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '11', '', '13', '', '15', '', '', '18', '', '', '21', '', 'X'])))
+
+    return ax
+
+
+def plot_pseudobulk_ascn(adata, ax=None, chromosome=None, **kwargs):
+    """Plot pseudobulk BAF colored by allele-specific copy number state.
+
+    Aggregates all cells and plots the consensus B-allele frequency as a
+    scatter plot. Points are colored by allele-specific copy number state.
+
+    Parameters
+    ----------
+    adata : anndata.AnnData
+        copy number data with layers alleleA, alleleB, totalcounts, A, B
+    ax : matplotlib.axes.Axes, optional
+        axes to plot on, by default current axes
+    chromosome : str, optional
+        single chromosome to plot, by default all
+    **kwargs : dict
+        additional arguments passed to plot_profile
+
+    Returns
+    -------
+    matplotlib.axes.Axes
+        axes used for plotting
+    """
+    plot_data = aggregate_pseudobulk(adata, agg_layers={
+        'alleleA': np.nansum,
+        'alleleB': np.nansum,
+        'totalcounts': np.nansum,
+        'A': np.nanmedian,
+        'B': np.nanmedian,
+    })
+    with np.errstate(divide='ignore', invalid='ignore'):
+        plot_data['BAF'] = plot_data['alleleB'] / plot_data['totalcounts']
+
+    if ax is None:
+        ax = plt.gca()
+
+    plot_data['ascn_state'] = 'Balanced'
+    plot_data.loc[plot_data['A'] > plot_data['B'], 'ascn_state'] = 'A-Gained'
+    plot_data.loc[plot_data['B'] > plot_data['A'], 'ascn_state'] = 'B-Gained'
+    plot_data.loc[plot_data['B'] == 0, 'ascn_state'] = 'A-Hom'
+    plot_data.loc[plot_data['A'] == 0, 'ascn_state'] = 'B-Hom'
+
+    plot_profile(
+        plot_data,
+        y='BAF',
+        hue='ascn_state',
+        ax=ax,
+        chromosome=chromosome,
+        palette=allele_state_colors,
+        hue_order=allele_state_colors.keys(),
+        **kwargs,
+    )
+
+    ax.set_ylim(-0.05, 1.05)
+    ax.spines[['right', 'top']].set_visible(False)
+    ax.spines['left'].set_bounds(0, 1)
+
+    sns.move_legend(
+        ax, 'upper left', prop={'size': 8}, markerscale=3, bbox_to_anchor=(1, 1),
+        labelspacing=0.4, handletextpad=0, columnspacing=0.5,
+        ncol=1, title='AS CN state', title_fontsize=10, frameon=False)
+
+    ax.grid(ls=':', lw=0.5, zorder=-100, which='major', axis='y')
+    ax.set_axisbelow(True)
+
+    return ax

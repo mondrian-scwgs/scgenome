@@ -4,11 +4,23 @@ from matplotlib.patches import Patch
 from numpy import ndarray
 from collections import defaultdict
 
+
+# Total copy number state palette
 color_reference = defaultdict(
     lambda: '#D4B9DA',
     {0: '#3182BD', 1: '#9ECAE1', 2: '#CCCCCC', 3: '#FDCC8A', 4: '#FC8D59', 5: '#E34A33',
      6: '#B30000', 7: '#980043', 8: '#DD1C77', 9: '#DF65B0', 10: '#C994C7', 11: '#D4B9DA'}
 )
+
+
+# Allele state color palette
+allele_state_colors = {
+    'A-Hom': '#56941E',
+    'A-Gained': '#94C773',
+    'Balanced': '#d5d5d4',
+    'B-Gained': '#7B52AE',
+    'B-Hom': '#471871',
+}
 
 
 def hex_to_rgb(h):
@@ -74,4 +86,42 @@ def cn_legend(ax, frameon=True, loc=2, bbox_to_anchor=(0., 1.), title='Copy Numb
     legend.set_zorder(level=200)
 
     return legend
+
+
+def add_allele_state_layer(adata):
+    """ Add a layer representing allelic states for plotting.
+
+    Encodes allele-specific states as integers:
+    0 = A-Hom (B==0), 1 = A-Gained (A>B), 2 = Balanced (A==B),
+    3 = B-Gained (B>A), 4 = B-Hom (A==0)
+
+    Parameters
+    ----------
+    adata : anndata.AnnData
+        annotated data with layers['A'] and layers['B']
+
+    Returns
+    -------
+    anndata.AnnData
+        adata with layers['allele_state'] added
+
+    Reads
+    -----
+    adata.layers['A'] : allele A copy number states
+    adata.layers['B'] : allele B copy number states
+
+    Modifies
+    --------
+    adata.layers['allele_state'] : integer allele state encoding
+    """
+    allele_state = np.zeros(adata.shape)
+    allele_state[adata.layers['B'] == 0] = 0
+    allele_state[(adata.layers['A'] != 0) & (adata.layers['B'] != 0) & (adata.layers['A'] > adata.layers['B'])] = 1
+    allele_state[(adata.layers['A'] != 0) & (adata.layers['B'] != 0) & (adata.layers['A'] == adata.layers['B'])] = 2
+    allele_state[(adata.layers['A'] != 0) & (adata.layers['B'] != 0) & (adata.layers['B'] > adata.layers['A'])] = 3
+    allele_state[adata.layers['A'] == 0] = 4
+
+    adata.layers['allele_state'] = allele_state
+
+    return adata
 

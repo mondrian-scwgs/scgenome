@@ -362,6 +362,48 @@ def aggregate_clusters(
     return adata
 
 
+def aggregate_pseudobulk(
+        adata: AnnData,
+        agg_X: Any=None,
+        agg_layers: Dict=None) -> pd.DataFrame:
+    """ Aggregate all cells into a single pseudobulk dataframe.
+
+    Parameters
+    ----------
+    adata : AnnData
+        copy number data
+    agg_X : Any, optional
+        function to aggregate X, by default None
+    agg_layers : Dict, optional
+        functions to aggregate layers keyed by layer names, by default None.
+        If not provided, aggregates all layers present in adata using
+        np.nanmean for float layers and np.nanmedian for integer layers.
+
+    Returns
+    -------
+    pd.DataFrame
+        per-bin pseudobulk dataframe containing adata.var columns plus
+        aggregated columns from agg_X/agg_layers
+    """
+    if agg_layers is None:
+        agg_layers = {}
+        for layer_name in adata.layers:
+            if np.issubdtype(adata.layers[layer_name].dtype, np.integer):
+                agg_layers[layer_name] = np.nanmedian
+            else:
+                agg_layers[layer_name] = np.nanmean
+
+    pseudobulk = adata.var.copy()
+
+    if agg_X is not None:
+        pseudobulk['_X'] = np.array(adata.to_df().agg(agg_X))
+
+    for layer_name, agg_fn in agg_layers.items():
+        pseudobulk[layer_name] = np.array(adata.to_df(layer=layer_name).agg(agg_fn))
+
+    return pseudobulk
+
+
 def aggregate_clusters_hmmcopy(adata: AnnData) -> AnnData:
     """ Aggregate hmmcopy copy number by cluster to create cluster CN matrix
 
