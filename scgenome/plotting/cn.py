@@ -1,3 +1,7 @@
+import re
+from dataclasses import dataclass
+from typing import List, Optional
+
 import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.lines as mlines
@@ -109,6 +113,511 @@ def setup_squash_yaxis(ax):
     ax.set_ylim(-0.25, ylim[1])
  
 
+@dataclass
+class GenomicRegion:
+    """A single genomic region with chromosome, start, end, and display label."""
+    chromosome: str
+    start: int
+    end: int
+    label: str = ''
+
+    def __post_init__(self):
+        if not self.label:
+            if self.start == 0:
+                self.label = f'chr{self.chromosome}'
+            else:
+                self.label = f'chr{self.chromosome}:{int(self.start/1e6)}M-{int(self.end/1e6)}M'
+
+
+class RegionMapper:
+    """Map genomic coordinates from multiple regions onto a single plot axis.
+
+    Regions are laid out sequentially on the axis with configurable gaps between them.
+    Coordinates outside the defined regions map to NaN.
+
+    Parameters
+    ----------
+    regions : list of GenomicRegion
+        Ordered list of genomic regions to include.
+    gap : float, optional
+        Size of gap between regions in base-pair-equivalent units (default 5e6).
+    tick_style : str, optional
+        Tick labeling style: 'position' for genomic position ticks within
+        each region, 'chromosome' for chromosome-boundary ticks with
+        region labels at midpoints (default 'position').
+    major_spacing : float, optional
+        Spacing for major ticks within each region (default 2e7).
+    minor_spacing : float, optional
+        Spacing for minor ticks within each region (default 1e6).
+    show_region_labels : bool, optional
+        Whether to show region labels at midpoints (default True).
+    show_separators : bool, optional
+        Whether to draw vertical lines at region boundaries (default True).
+    separator_color : str, optional
+        Color of separator lines (default 'gray').
+    separator_alpha : float, optional
+        Alpha of separator lines (default 0.3).
+    separator_linewidth : float, optional
+        Line width of separator lines (default 0.5).
+    show_spine_breaks : bool, optional
+        Whether to break the x-axis spine at gaps between regions (default True).
+    min_label_spacing : float, optional
+        Minimum axis distance between displayed region labels in bp-equivalent
+        units. Labels are placed greedily left-to-right: a label is shown only
+        if its midpoint is at least this far from the previous shown label.
+        Useful for whole-genome views where small chromosomes crowd labels.
+        Default None (no thinning).
+    label_regions : list, optional
+        Allowlist of region labels to display. Only regions whose label is in
+        this list are eligible for labeling. Default None (all regions eligible).
+        Composable with ``min_label_spacing``.
+    chromosome_names : dict, optional
+        Mapping from region label to display name, used with
+        tick_style='chromosome' (default uses region labels).
+
+    Examples
+    --------
+    >>> from scgenome.plotting.cn import RegionMapper, GenomicRegion
+    >>> regions = [
+    ...     GenomicRegion('1', 0, 249250621, 'chr1'),
+    ...     GenomicRegion('2', 0, 93300000, '2p'),
+    ...     GenomicRegion('17', 25000000, 81195210, '17q'),
+    ... ]
+    >>> mapper = RegionMapper(regions, gap=5e6)
+    >>> mapper.map_position('1', 100e6)  # returns axis coordinate
+    >>> mapper.map_position('3', 50e6)   # returns NaN (not in regions)
+    """
+
+    def __init__(
+        self,
+        regions: List[GenomicRegion],
+        gap: float = 1e7,
+        tick_style: str = 'position',
+        major_spacing: float = 5e7,
+        minor_spacing: float = 1e7,
+        show_region_labels: bool = True,
+        show_separators: bool = False,
+        separator_color: str = 'gray',
+        separator_alpha: float = 0.3,
+        separator_linewidth: float = 0.5,
+        show_spine_breaks: bool = True,
+        min_label_spacing: Optional[float] = None,
+        label_regions: Optional[list] = None,
+        chromosome_names: Optional[dict] = None,
+    ):
+        self.regions = list(regions)
+        self.gap = gap
+        self.tick_style = tick_style
+        self.major_spacing = major_spacing
+        self.minor_spacing = minor_spacing
+        self.show_region_labels = show_region_labels
+        self.show_separators = show_separators
+        self.separator_color = separator_color
+        self.separator_alpha = separator_alpha
+        self.separator_linewidth = separator_linewidth
+        self.show_spine_breaks = show_spine_breaks
+        self.min_label_spacing = min_label_spacing
+        self.label_regions = set(label_regions) if label_regions is not None else None
+        self.chromosome_names = chromosome_names
+
+        # Precompute axis offsets for each region
+        self._offsets = []  # axis start for each region
+        self._region_widths = []
+        current_offset = 0.0
+        for i, region in enumerate(self.regions):
+            if i > 0:
+                current_offset += self.gap
+            self._offsets.append(current_offset)
+            width = region.end - region.start
+            self._region_widths.append(width)
+            current_offset += width
+        self._total_width = current_offset
+
+    @classmethod
+    def from_regions(cls, region_specs, genome=None, **kwargs):
+        """Create RegionMapper from a list of region specifications.
+
+        Parameters
+        ----------
+        region_specs : list
+            Each element can be:
+            - A GenomicRegion instance
+            - A tuple (chromosome, start, end) or (chromosome, start, end, label)
+            - A string like 'chr1', '2p', '17q', 'chr3:10000000-50000000'
+        genome : str or RefGenomeInfo, optional
+            Genome version for resolving chromosome names/arms.
+        **kwargs :
+            Additional arguments passed to :class:`RegionMapper` constructor.
+
+        Returns
+        -------
+        RegionMapper
+        """
+        regions = []
+        for spec in region_specs:
+            if isinstance(spec, GenomicRegion):
+                regions.append(spec)
+            elif isinstance(spec, (tuple, list)):
+                if len(spec) == 3:
+                    regions.append(GenomicRegion(str(spec[0]), int(spec[1]), int(spec[2])))
+                elif len(spec) >= 4:
+                    regions.append(GenomicRegion(str(spec[0]), int(spec[1]), int(spec[2]), str(spec[3])))
+            elif isinstance(spec, str):
+                regions.append(cls._parse_region_string(spec, genome=genome))
+            else:
+                raise ValueError(f"Unrecognized region spec: {spec}")
+        return cls(regions, tick_style='position', **kwargs)
+
+    @staticmethod
+    def _parse_region_string(s, genome=None):
+        """Parse region strings like 'chr1', '2p', '17q', 'chr3:10000000-50000000'."""
+        s = s.strip()
+
+        # Try explicit interval: chr3:10000000-50000000
+        interval_match = re.match(
+            r'^(?:chr)?(\w+):([0-9,_]+)-([0-9,_]+)$', s)
+        if interval_match:
+            chrom = interval_match.group(1)
+            start = int(interval_match.group(2).replace(',', '').replace('_', ''))
+            end = int(interval_match.group(3).replace(',', '').replace('_', ''))
+            return GenomicRegion(chrom, start, end)
+
+        genome_info = refgenome.get_genome_info(genome=genome)
+        chrom_info = genome_info.chromosome_info.set_index('chr')
+
+        # Try arm notation: 2p, 17q
+        arm_match = re.match(r'^(?:chr)?(\w+)([pq])$', s)
+        if arm_match:
+            chrom = arm_match.group(1)
+            arm = arm_match.group(2)
+            chrom_key = chrom if chrom in chrom_info.index else f'chr{chrom}'
+            if chrom_key not in chrom_info.index:
+                raise ValueError(f"Unknown chromosome: {chrom}")
+            chrom_length = int(chrom_info.loc[chrom_key, 'chromosome_length'])
+            # Use centromere position if available, otherwise approximate at 40%
+            if 'centromere_start' in chrom_info.columns:
+                centro = int(chrom_info.loc[chrom_key, 'centromere_start'])
+            else:
+                centro = int(chrom_length * 0.4)
+            if arm == 'p':
+                return GenomicRegion(chrom_key, 0, centro, f'{chrom}p')
+            else:
+                return GenomicRegion(chrom_key, centro, chrom_length, f'{chrom}q')
+
+        # Whole chromosome: chr1, 1
+        chrom_match = re.match(r'^(?:chr)?(\w+)$', s)
+        if chrom_match:
+            chrom = chrom_match.group(1)
+            chrom_key = chrom if chrom in chrom_info.index else f'chr{chrom}'
+            if chrom_key not in chrom_info.index:
+                raise ValueError(f"Unknown chromosome: {chrom}")
+            chrom_length = int(chrom_info.loc[chrom_key, 'chromosome_length'])
+            return GenomicRegion(chrom_key, 0, chrom_length, f'chr{chrom}')
+
+        raise ValueError(f"Cannot parse region string: '{s}'")
+
+    @classmethod
+    def whole_genome(cls, genome=None, **kwargs):
+        """Create a RegionMapper covering all chromosomes with no gaps.
+
+        Parameters
+        ----------
+        genome : str or RefGenomeInfo, optional
+            Genome version (default uses global setting).
+        **kwargs :
+            Additional arguments passed to :class:`RegionMapper` constructor.
+
+        Returns
+        -------
+        RegionMapper
+        """
+        if 'gap' not in kwargs:
+            kwargs['gap'] = 0
+        genome_info = refgenome.get_genome_info(genome=genome)
+        regions = []
+        for _, row in genome_info.chromosome_info.iterrows():
+            chrom = row['chr']
+            length = int(row['chromosome_length'])
+            regions.append(GenomicRegion(chrom, 0, length, chrom))
+        return cls(regions, tick_style='chromosome', **kwargs)
+
+    @classmethod
+    def for_chromosome(cls, chromosome, start=None, end=None, genome=None, **kwargs):
+        """Create a RegionMapper for a single chromosome or sub-region.
+
+        Parameters
+        ----------
+        chromosome : str
+            Chromosome name (e.g. '1', 'chr1', 'X').
+        start : int, optional
+            Start position within chromosome (default 0).
+        end : int, optional
+            End position within chromosome (default chromosome length).
+        genome : str or RefGenomeInfo, optional
+            Genome version (default uses global setting).
+        **kwargs :
+            Additional arguments passed to :class:`RegionMapper` constructor.
+
+        Returns
+        -------
+        RegionMapper
+        """
+        genome_info = refgenome.get_genome_info(genome=genome)
+        chrom_info = genome_info.chromosome_info.set_index('chr')
+        chrom_key = chromosome if chromosome in chrom_info.index else f'chr{chromosome}'
+        if chrom_key not in chrom_info.index:
+            chrom_key = chromosome.replace('chr', '')
+        if chrom_key not in chrom_info.index:
+            raise ValueError(f"Unknown chromosome: {chromosome}")
+        chrom_length = int(chrom_info.loc[chrom_key, 'chromosome_length'])
+        region_start = int(start) if start is not None else 0
+        region_end = int(end) if end is not None else chrom_length
+        label = f'chr{chrom_key.replace("chr", "")}'
+        region = GenomicRegion(chrom_key, region_start, region_end, label)
+        return cls([region], tick_style='position', **kwargs)
+
+    def map_position(self, chromosome, position):
+        """Map a single genomic position to axis coordinate.
+
+        Returns NaN if the position is not within any defined region.
+        """
+        chromosome = str(chromosome)
+        for i, region in enumerate(self.regions):
+            if region.chromosome == chromosome or region.chromosome.replace('chr', '') == chromosome.replace('chr', ''):
+                if region.start <= position < region.end:
+                    return self._offsets[i] + (position - region.start)
+        return np.nan
+
+    def map_series(self, df, chrom_col='chr', pos_col='start', out_col='_x_mapped'):
+        """Map genomic positions in a DataFrame to axis coordinates.
+
+        Parameters
+        ----------
+        df : DataFrame
+            Input data with chromosome and position columns.
+        chrom_col : str
+            Column with chromosome values.
+        pos_col : str
+            Column with position values.
+        out_col : str
+            Name for the output mapped coordinate column.
+
+        Returns
+        -------
+        DataFrame
+            Copy of df with out_col added and rows outside regions removed.
+        """
+        df = df.copy()
+        mapped = np.full(len(df), np.nan)
+        chroms = df[chrom_col].astype(str).values
+        positions = df[pos_col].values
+
+        for i, region in enumerate(self.regions):
+            region_chrom = region.chromosome.replace('chr', '')
+            mask = np.array([
+                (c.replace('chr', '') == region_chrom) for c in chroms
+            ])
+            mask = mask & (positions >= region.start) & (positions < region.end)
+            mapped[mask] = self._offsets[i] + (positions[mask] - region.start)
+
+        df[out_col] = mapped
+        df = df[~np.isnan(df[out_col])]
+        return df
+
+    def contains(self, chromosome, position):
+        """Check if a position falls within any region."""
+        return not np.isnan(self.map_position(chromosome, position))
+
+    def region_boundaries(self):
+        """Return axis coordinates of region boundaries (start and end of each)."""
+        boundaries = []
+        for i, region in enumerate(self.regions):
+            boundaries.append(self._offsets[i])
+            boundaries.append(self._offsets[i] + self._region_widths[i])
+        return boundaries
+
+    def region_starts(self):
+        """Return axis coordinates of region starts."""
+        return [self._offsets[i] for i in range(len(self.regions))]
+
+    def region_ends(self):
+        """Return axis coordinates of region ends."""
+        return [self._offsets[i] + self._region_widths[i] for i in range(len(self.regions))]
+
+    def region_midpoints(self):
+        """Return axis coordinates of region midpoints (for label placement)."""
+        return [self._offsets[i] + self._region_widths[i] / 2
+                for i in range(len(self.regions))]
+
+    def region_labels(self):
+        """Return display labels for all regions."""
+        return [r.label for r in self.regions]
+
+    def xlim(self):
+        """Return (min, max) axis limits encompassing all regions and gaps."""
+        return (0, self._total_width)
+
+    def setup_xaxis(self, ax):
+        """Configure x-axis ticks, labels, limits, and region separators.
+
+        All display parameters are read from the RegionMapper instance
+        attributes set at construction time.
+
+        Parameters
+        ----------
+        ax : matplotlib.axes.Axes
+            Axes to configure.
+        """
+        show_region_labels = self.show_region_labels
+
+        if self.tick_style == 'chromosome':
+            # Chromosome-boundary style: major ticks at region boundaries (no labels),
+            # minor ticks at region midpoints with region-name labels
+            boundary_ticks = [0] + self.region_ends()
+            ax.set_xticks(boundary_ticks)
+            ax.set_xticklabels([])
+
+            midpoints = self.region_midpoints()
+            labels = self.region_labels()
+            if self.chromosome_names is not None:
+                labels = [self.chromosome_names.get(lbl, lbl) for lbl in labels]
+
+            # Thin labels: allowlist filter, then greedy spacing
+            display_labels = list(labels)
+            raw_labels = self.region_labels()
+            if self.label_regions is not None:
+                display_labels = [
+                    lbl if raw_labels[i] in self.label_regions else ''
+                    for i, lbl in enumerate(display_labels)
+                ]
+            if self.min_label_spacing is not None:
+                last_shown = -np.inf
+                for i, lbl in enumerate(display_labels):
+                    if lbl and midpoints[i] - last_shown >= self.min_label_spacing:
+                        last_shown = midpoints[i]
+                    else:
+                        display_labels[i] = ''
+
+            ax.xaxis.set_minor_locator(
+                matplotlib.ticker.FixedLocator(midpoints))
+            ax.xaxis.set_minor_formatter(
+                matplotlib.ticker.FixedFormatter(display_labels))
+
+            show_region_labels = False  # already shown via minor ticks
+
+        else:
+            # Position style: genomic position ticks within each region
+            all_major_ticks = []
+            all_major_labels = []
+            all_minor_ticks = []
+
+            for i, region in enumerate(self.regions):
+                offset = self._offsets[i]
+                width = self._region_widths[i]
+
+                # Major ticks within this region
+                if self.major_spacing is not None:
+                    ticks = np.arange(0, width, self.major_spacing)
+                    for t in ticks:
+                        all_major_ticks.append(offset + t)
+                        genomic_pos = region.start + t
+                        all_major_labels.append(f'{int(genomic_pos / 1e6)}M')
+
+                # Minor ticks within this region
+                if self.minor_spacing is not None:
+                    minor_ticks = np.arange(0, width, self.minor_spacing)
+                    for t in minor_ticks:
+                        all_minor_ticks.append(offset + t)
+
+            ax.set_xticks(all_major_ticks)
+            ax.set_xticklabels(all_major_labels)
+
+            if all_minor_ticks:
+                ax.xaxis.set_minor_locator(
+                    matplotlib.ticker.FixedLocator(all_minor_ticks))
+                ax.xaxis.set_minor_formatter(matplotlib.ticker.NullFormatter())
+
+        # Set axis limits
+        xmin, xmax = self.xlim()
+        ax.set_xlim(xmin - 0.5, xmax + 0.5)
+
+        # Draw region separators
+        if self.show_separators and len(self.regions) > 1:
+            for i in range(1, len(self.regions)):
+                if self.gap > 0:
+                    # Draw separators on either side of the gap
+                    x_left = self._offsets[i-1] + self._region_widths[i-1]
+                    x_right = self._offsets[i]
+                    ax.axvline(x_left, color=self.separator_color, alpha=self.separator_alpha,
+                               linewidth=self.separator_linewidth, linestyle='--', zorder=1)
+                    ax.axvline(x_right, color=self.separator_color, alpha=self.separator_alpha,
+                               linewidth=self.separator_linewidth, linestyle='--', zorder=1)
+                else:
+                    # No gap: single separator at the boundary
+                    gap_x = self._offsets[i]
+                    ax.axvline(gap_x, color=self.separator_color, alpha=self.separator_alpha,
+                               linewidth=self.separator_linewidth, linestyle='--', zorder=1)
+
+        # Mask grid lines in gaps between regions
+        if self.gap > 0 and len(self.regions) > 1:
+            bg_color = ax.get_facecolor()
+            for i in range(1, len(self.regions)):
+                x_left = self._offsets[i-1] + self._region_widths[i-1]
+                x_right = self._offsets[i]
+                ax.axvspan(x_left, x_right, facecolor=bg_color, edgecolor='none', zorder=0.75)
+
+        # Break the x-axis spine at gaps between regions
+        if self.show_spine_breaks and len(self.regions) > 1:
+            ax.spines['bottom'].set_visible(False)
+
+            # Draw spine segments only under each region
+            trans = transforms.blended_transform_factory(ax.transData, ax.transAxes)
+            for i, region in enumerate(self.regions):
+                seg_start = self._offsets[i]
+                seg_end = self._offsets[i] + self._region_widths[i]
+                spine_seg = mlines.Line2D(
+                    [seg_start, seg_end], [0, 0],
+                    color='black', linewidth=plt.rcParams.get('axes.linewidth', 0.8),
+                    transform=trans, clip_on=False, zorder=100
+                )
+                ax.add_line(spine_seg)
+
+        # Region labels as secondary x-axis labels
+        if show_region_labels:
+            midpoints = self.region_midpoints()
+            labels = self.region_labels()
+            ax2 = ax.secondary_xaxis('bottom')
+            ax2.set_xticks(midpoints)
+            ax2.set_xticklabels(labels)
+            ax2.tick_params(axis='x', length=0, pad=20)
+            for spine in ax2.spines.values():
+                spine.set_visible(False)
+
+
+def _assign_ascn_state(df):
+    """Assign allele-specific CN state labels based on A and B columns."""
+    df['ascn_state'] = 'Balanced'
+    df.loc[df['A'] > df['B'], 'ascn_state'] = 'A-Gained'
+    df.loc[df['B'] > df['A'], 'ascn_state'] = 'B-Gained'
+    df.loc[df['B'] == 0, 'ascn_state'] = 'A-Hom'
+    df.loc[df['A'] == 0, 'ascn_state'] = 'B-Hom'
+    return df
+
+
+def _resolve_region_mapper(region_mapper, chromosome=None, start=None, end=None, genome=None):
+    """Create a RegionMapper if one is not provided.
+
+    If region_mapper is already set, return it as-is.
+    If chromosome is set, create a single-chromosome mapper,
+    otherwise create a whole-genome mapper.
+    """
+    if region_mapper is not None:
+        return region_mapper
+    if chromosome is not None:
+        return RegionMapper.for_chromosome(chromosome, start=start, end=end, genome=genome)
+    return RegionMapper.whole_genome(genome=genome)
+
+
 def plot_profile(
         data: DataFrame,
         y,
@@ -120,8 +629,7 @@ def plot_profile(
         start=None,
         end=None,
         squashy=False,
-        tick_major_spacing=None,
-        tick_minor_spacing=None,
+        region_mapper=None,
         **kwargs
 ):
     """Plot scatter points of copy number across the genome or a chromosome.
@@ -151,10 +659,8 @@ def plot_profile(
         compress y axis, by default False
     rawy : bool, optional
         raw data on y axis, by default False
-    tick_major_spacing : int, optional
-        major tick spacing, by default 
-    tick_minor_spacing : int, optional
-        minor tick spacing, by default 1e6
+    region_mapper : RegionMapper, optional
+        RegionMapper object for mapping genomic regions, by default None
     **kwargs :
         kwargs for sns.scatterplot
 
@@ -191,56 +697,40 @@ def plot_profile(
         palette = cn_colors.color_reference
         hue_order = cn_colors.color_reference.keys()
 
-    if chromosome is not None:
-        data = data[data['chr'] == chromosome]
+    region_mapper = _resolve_region_mapper(
+        region_mapper, chromosome=chromosome, start=start, end=end)
 
-    if start is not None:
-        data = data[data['start'] >= start]
+    data = region_mapper.map_series(data, chrom_col='chr', pos_col='start', out_col='_x_mapped')
 
-    if end is not None:
-        data = data[data['end'] <= end]
-
-    genome_axis_plot(
-        data,
-        sns.scatterplot,
-        ('start',),
-        x='start',
+    sns.scatterplot(
+        data=data,
+        x='_x_mapped',
         y=y,
         hue=hue,
         palette=palette,
         hue_order=hue_order,
         ax=ax,
-        clip_on=False,
+        clip_on=True,
         **kwargs)
 
-    setup_genome_xaxis_ticks(
-        ax,
-        chromosome=chromosome,
-        start=start,
-        end=end,
-        major_spacing=tick_major_spacing,
-        minor_spacing=tick_minor_spacing,
-    )
-
-    setup_genome_xaxis_lims(
-        ax,
-        chromosome=chromosome,
-        start=start,
-        end=end,
-    )
+    region_mapper.setup_xaxis(ax)
 
     if squashy:
         setup_squash_yaxis(ax)
 
-    if chromosome is not None:
-        ax.set_xlabel(f'Chromosome {chromosome}')
-
-    else:
-        ax.set_xlabel('Chromosome')
-
     ax.spines[['right', 'top']].set_visible(False)
     ax.xaxis.tick_bottom()
     ax.yaxis.tick_left()
+    ax.grid(axis='y', which='major', ls=':', lw=0.5)
+    ax.set_axisbelow(True)
+
+    if ax.get_legend() is not None:
+        n_items = len(ax.get_legend().legend_handles)
+        ncol = max(1, n_items // 4)
+        sns.move_legend(
+            ax, 'upper left', prop={'size': 8}, markerscale=3, bbox_to_anchor=(1, 1),
+            labelspacing=0.4, handletextpad=0, columnspacing=0.5,
+            ncol=ncol, title_fontsize=10, frameon=False)
 
     return ax
 
@@ -269,6 +759,7 @@ def plot_rearrangement_arcs(
     label_fontsize=7,
     alpha=1.0,
     zorder=10,
+    region_mapper=None,
 ):
     """Plot rearrangement arcs linking breakpoint pairs.
     
@@ -355,6 +846,8 @@ def plot_rearrangement_arcs(
         Transparency for breakpoint lines (default 1.0).
     zorder : int, optional
         Drawing order (default 10).
+    region_mapper : RegionMapper, optional
+        RegionMapper object for mapping genomic regions, by default None
     
     Returns
     -------
@@ -400,18 +893,13 @@ def plot_rearrangement_arcs(
     if strand_colors is not None:
         default_strand_colors.update(strand_colors)
     
+    region_mapper = _resolve_region_mapper(
+        region_mapper, chromosome=chromosome, start=start, end=end)
+    
     xlim = ax.get_xlim()
     x_range = xlim[1] - xlim[0]
     
-    # Determine view region
-    if start is not None:
-        view_start = start
-    else:
-        view_start = xlim[0]
-    if end is not None:
-        view_end = end
-    else:
-        view_end = xlim[1]
+    view_start, view_end = region_mapper.xlim()
     
     # Rail spacing (distance between the two rail lines)
     rail_spacing = abs(height_same_strand - height_diff_strand)
@@ -427,35 +915,12 @@ def plot_rearrangement_arcs(
         strand1 = row.get('strand_1', '+')
         strand2 = row.get('strand_2', '+')
         
-        # Track if breakends are on the target chromosome
-        on_chrom_1 = True
-        on_chrom_2 = True
-        
-        # Filter by chromosome and determine positions
-        if chromosome is not None:
-            chrom_match = chromosome.replace('chr', '')
-            c1_match = chrom1.replace('chr', '')
-            c2_match = chrom2.replace('chr', '')
-            
-            on_chrom_1 = (c1_match == chrom_match)
-            on_chrom_2 = (c2_match == chrom_match)
-            
-            if not on_chrom_1 and not on_chrom_2:
-                continue
-        else:
-            try:
-                genome_info = refgenome.get_genome_info()
-                chromosome_info = genome_info.chromosome_info.set_index('chr')
-                if chrom1 in chromosome_info.index:
-                    pos1 = pos1 + chromosome_info.loc[chrom1, 'chromosome_start']
-                if chrom2 in chromosome_info.index:
-                    pos2 = pos2 + chromosome_info.loc[chrom2, 'chromosome_start']
-            except:
-                pass
-        
-        # Check if positions are within view region
-        in_view_1 = on_chrom_1 and (view_start <= pos1 <= view_end)
-        in_view_2 = on_chrom_2 and (view_start <= pos2 <= view_end)
+        mapped1 = region_mapper.map_position(chrom1, pos1)
+        mapped2 = region_mapper.map_position(chrom2, pos2)
+        in_view_1 = not np.isnan(mapped1)
+        in_view_2 = not np.isnan(mapped2)
+        pos1 = mapped1
+        pos2 = mapped2
         
         if not in_view_1 and not in_view_2:
             continue
@@ -674,7 +1139,8 @@ def plot_cn_rect(
         color=None,
         offset=0,
         rect_kws=None,
-        fill_gaps=True):
+        fill_gaps=True,
+        region_mapper=None):
     """Plot copy number as colored rectangles on a genome axis.
 
     Parameters
@@ -747,6 +1213,9 @@ def plot_cn_rect(
     if chromosome is not None:
         data = data[data['chr'] == chromosome]
 
+    region_mapper = _resolve_region_mapper(
+        region_mapper, chromosome=chromosome)
+
     if hue is not None:
         if cmap is None:
             data['color'] = data[hue].map(cn_colors.color_reference)
@@ -777,16 +1246,15 @@ def plot_cn_rect(
         pc = mc.PatchCollection(rectangles, match_original=True, zorder=2)
         ax.add_collection(pc)
 
-    genome_axis_plot(
-        data,
-        plot_rect,
-        ('start', 'end'),
-        ax=ax,
-    )
+    data = region_mapper.map_series(data, chrom_col='chr', pos_col='start', out_col='_start_mapped')
+    data = region_mapper.map_series(data, chrom_col='chr', pos_col='end', out_col='_end_mapped')
+    data['start'] = data['_start_mapped']
+    data['end'] = data['_end_mapped']
+
+    plot_rect(data, ax=ax)
 
     ax.set_ylim((data[y].min() - 0.5, data[y].max() + 0.5))
-    setup_genome_xaxis_ticks(ax, chromosome=chromosome)
-    setup_genome_xaxis_lims(ax, chromosome=chromosome)
+    region_mapper.setup_xaxis(ax)
 
     ax.spines[['right', 'top']].set_visible(False)
 
@@ -804,8 +1272,7 @@ def plot_cell_tcn(
         start=None,
         end=None,
         squashy=True,
-        tick_major_spacing=None,
-        tick_minor_spacing=None,
+        region_mapper=None,
         **kwargs
 ):
     """Plot a cell-specific total copy number profile.
@@ -836,10 +1303,6 @@ def plot_cell_tcn(
         end of plotting region
     squashy : bool, optional
         compress y axis, by default True
-    tick_major_spacing : int, optional
-        major tick spacing
-    tick_minor_spacing : int, optional
-        minor tick spacing
     **kwargs : dict
         additional arguments passed to plot_profile
 
@@ -885,24 +1348,15 @@ def plot_cell_tcn(
         start=start,
         end=end,
         squashy=squashy,
-        tick_major_spacing=tick_major_spacing,
-        tick_minor_spacing=tick_minor_spacing,
+        region_mapper=region_mapper,
         **kwargs)
 
-    ax.spines[['right', 'top']].set_visible(False)
-
-    sns.move_legend(
-        ax, 'upper left', prop={'size': 8}, markerscale=3, bbox_to_anchor=(1, 1),
-        labelspacing=0.4, handletextpad=0, columnspacing=0.5,
-        ncol=3, title='Total CN state', title_fontsize=10, frameon=False)
-
-    ax.grid(ls=':', lw=0.5, zorder=-100, which='major', axis='y')
-    ax.set_axisbelow(True)
+    ax.get_legend().set_title('Total CN state')
 
     return ax
 
 
-def plot_cell_ascn(adata, cell_id, ax=None, chromosome=None, **kwargs):
+def plot_cell_ascn(adata, cell_id, ax=None, chromosome=None, region_mapper=None, **kwargs):
     """Plot BAF colored by allele-specific copy number state.
 
     Extracts data for a single cell from an AnnData object and plots B-allele
@@ -936,11 +1390,7 @@ def plot_cell_ascn(adata, cell_id, ax=None, chromosome=None, **kwargs):
         layer_names=['copy', 'BAF', 'state', 'A', 'B']
     )
 
-    plot_data['ascn_state'] = 'Balanced'
-    plot_data.loc[plot_data['A'] > plot_data['B'], 'ascn_state'] = 'A-Gained'
-    plot_data.loc[plot_data['B'] > plot_data['A'], 'ascn_state'] = 'B-Gained'
-    plot_data.loc[plot_data['B'] == 0, 'ascn_state'] = 'A-Hom'
-    plot_data.loc[plot_data['A'] == 0, 'ascn_state'] = 'B-Hom'
+    _assign_ascn_state(plot_data)
 
     plot_profile(
         plot_data,
@@ -948,27 +1398,21 @@ def plot_cell_ascn(adata, cell_id, ax=None, chromosome=None, **kwargs):
         hue='ascn_state',
         ax=ax,
         chromosome=chromosome,
+        region_mapper=region_mapper,
         palette=allele_state_colors,
         hue_order=allele_state_colors.keys(),
         **kwargs,
     )
 
     ax.set_ylim(-0.05, 1.05)
-    ax.spines[['right', 'top']].set_visible(False)
     ax.spines['left'].set_bounds(0, 1)
 
-    sns.move_legend(
-        ax, 'upper left', prop={'size': 8}, markerscale=3, bbox_to_anchor=(1, 1),
-        labelspacing=0.4, handletextpad=0, columnspacing=0.5,
-        ncol=1, title='AS CN state', title_fontsize=10, frameon=False)
-
-    ax.grid(ls=':', lw=0.5, zorder=-100, which='major', axis='y')
-    ax.set_axisbelow(True)
+    ax.get_legend().set_title('AS CN state')
 
     return ax
 
 
-def plot_pseudobulk_tcn(adata, ax=None, chromosome=None, **kwargs):
+def plot_pseudobulk_tcn(adata, ax=None, chromosome=None, region_mapper=None, **kwargs):
     """Plot pseudobulk total copy number profile.
 
     Aggregates all cells and plots the consensus total copy number.
@@ -1004,31 +1448,18 @@ def plot_pseudobulk_tcn(adata, ax=None, chromosome=None, **kwargs):
         y='copy',
         hue='state',
         chromosome=chromosome,
+        region_mapper=region_mapper,
         ax=ax,
         squashy=True,
         hue_order=sorted(range(12)),
         **kwargs)
 
-    ax.spines[['right', 'top']].set_visible(False)
-
-    sns.move_legend(
-        ax, 'upper left', prop={'size': 8}, markerscale=3, bbox_to_anchor=(1, 1),
-        labelspacing=0.4, handletextpad=0, columnspacing=0.5,
-        ncol=3, title='Total CN state', title_fontsize=10, frameon=False)
-
-    ax.grid(ls=':', lw=0.5, zorder=-100, which='major', axis='y')
-    ax.set_axisbelow(True)
-
-    if chromosome is None:
-        setup_genome_xaxis_ticks(
-            ax, chromosome_names=dict(zip(
-                [str(a) for a in range(1, 23)] + ['X'],
-                ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '11', '', '13', '', '15', '', '', '18', '', '', '21', '', 'X'])))
+    ax.get_legend().set_title('Total CN state')
 
     return ax
 
 
-def plot_pseudobulk_ascn(adata, ax=None, chromosome=None, **kwargs):
+def plot_pseudobulk_ascn(adata, ax=None, chromosome=None, region_mapper=None, **kwargs):
     """Plot pseudobulk BAF colored by allele-specific copy number state.
 
     Aggregates all cells and plots the consensus B-allele frequency as a
@@ -1063,11 +1494,7 @@ def plot_pseudobulk_ascn(adata, ax=None, chromosome=None, **kwargs):
     if ax is None:
         ax = plt.gca()
 
-    plot_data['ascn_state'] = 'Balanced'
-    plot_data.loc[plot_data['A'] > plot_data['B'], 'ascn_state'] = 'A-Gained'
-    plot_data.loc[plot_data['B'] > plot_data['A'], 'ascn_state'] = 'B-Gained'
-    plot_data.loc[plot_data['B'] == 0, 'ascn_state'] = 'A-Hom'
-    plot_data.loc[plot_data['A'] == 0, 'ascn_state'] = 'B-Hom'
+    _assign_ascn_state(plot_data)
 
     plot_profile(
         plot_data,
@@ -1075,21 +1502,14 @@ def plot_pseudobulk_ascn(adata, ax=None, chromosome=None, **kwargs):
         hue='ascn_state',
         ax=ax,
         chromosome=chromosome,
+        region_mapper=region_mapper,
         palette=allele_state_colors,
         hue_order=allele_state_colors.keys(),
         **kwargs,
     )
 
     ax.set_ylim(-0.05, 1.05)
-    ax.spines[['right', 'top']].set_visible(False)
     ax.spines['left'].set_bounds(0, 1)
-
-    sns.move_legend(
-        ax, 'upper left', prop={'size': 8}, markerscale=3, bbox_to_anchor=(1, 1),
-        labelspacing=0.4, handletextpad=0, columnspacing=0.5,
-        ncol=1, title='AS CN state', title_fontsize=10, frameon=False)
-
-    ax.grid(ls=':', lw=0.5, zorder=-100, which='major', axis='y')
-    ax.set_axisbelow(True)
+    ax.get_legend().set_title('AS CN state')
 
     return ax
