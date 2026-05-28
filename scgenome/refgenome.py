@@ -1,6 +1,7 @@
+import importlib.resources
+
 import numpy as np
 import pandas as pd
-import pkg_resources
 
 
 def read_chromosome_lengths(genome_fasta_index):
@@ -25,22 +26,22 @@ class RefGenomeInfo(object):
         if version == 'hg19':
             self.chromosomes = chromosomes or [str(a) for a in range(1, 23)] + ['X', 'Y']
             self.plot_chromosomes = plot_chromosomes or [str(a) for a in range(1, 23)] + ['X', 'Y']
-            self.genome_fasta_index = pkg_resources.resource_filename('scgenome', 'data/hg19.fa.fai')
-            self.cyto_filename = pkg_resources.resource_filename('scgenome', 'data/hg19_cytoBand.txt.gz')
+            self.genome_fasta_index = importlib.resources.files('scgenome').joinpath('data/hg19.fa.fai')
+            self.cyto_filename = importlib.resources.files('scgenome').joinpath('data/hg19_cytoBand.txt.gz')
             self.cytobands = read_cytobands(self.cyto_filename, remove_chr_prefix=True)
 
         elif version == 'grch38':
             self.chromosomes = chromosomes or [f'chr{a}' for a in range(1, 23)] + ['chrX', 'chrY']
             self.plot_chromosomes = plot_chromosomes or [str(a) for a in range(1, 23)] + ['X', 'Y']
-            self.genome_fasta_index = pkg_resources.resource_filename('scgenome', 'data/grch38.fa.fai')
-            self.cyto_filename = pkg_resources.resource_filename('scgenome', 'data/grch38_cytoBand.txt.gz')
+            self.genome_fasta_index = importlib.resources.files('scgenome').joinpath('data/grch38.fa.fai')
+            self.cyto_filename = importlib.resources.files('scgenome').joinpath('data/grch38_cytoBand.txt.gz')
             self.cytobands = read_cytobands(self.cyto_filename, remove_chr_prefix=False)
 
         elif version == 'mm10':
             self.chromosomes = chromosomes or [str(a) for a in range(1, 20)] + ['X', 'Y']
             self.plot_chromosomes = plot_chromosomes or [str(a) for a in range(1, 20)] + ['X', 'Y']
-            self.genome_fasta_index = pkg_resources.resource_filename('scgenome', 'data/mm10.fa.fai')
-            self.cyto_filename = pkg_resources.resource_filename('scgenome', 'data/mm10_cytoBand.txt.gz')
+            self.genome_fasta_index = importlib.resources.files('scgenome').joinpath('data/mm10.fa.fai')
+            self.cyto_filename = importlib.resources.files('scgenome').joinpath('data/mm10_cytoBand.txt.gz')
             self.cytobands = read_cytobands(self.cyto_filename, remove_chr_prefix=True)
 
         else:
