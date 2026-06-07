@@ -270,16 +270,25 @@ class RegionMapper:
 
     @staticmethod
     def _parse_region_string(s, genome=None):
-        """Parse region strings like 'chr1', '2p', '17q', 'chr3:10000000-50000000'."""
+        """Parse region strings like 'chr1', '2p', '17q', 'chr3:10000000-50000000', 'chr1:10000000-'."""
         s = s.strip()
 
-        # Try explicit interval: chr3:10000000-50000000
+        # Try explicit interval: chr3:10000000-50000000 or chr1:10000000- (missing end)
         interval_match = re.match(
-            r'^(?:chr)?(\w+):([0-9,_]+)-([0-9,_]+)$', s)
+            r'^(?:chr)?(\w+):([0-9,_]+)-([0-9,_]*)$', s)
         if interval_match:
             chrom = interval_match.group(1)
             start = int(interval_match.group(2).replace(',', '').replace('_', ''))
-            end = int(interval_match.group(3).replace(',', '').replace('_', ''))
+            end_str = interval_match.group(3).replace(',', '').replace('_', '')
+            if end_str:
+                end = int(end_str)
+            else:
+                genome_info = refgenome.get_genome_info(genome=genome)
+                chrom_info = genome_info.chromosome_info.set_index('chr')
+                chrom_key = chrom if chrom in chrom_info.index else f'chr{chrom}'
+                if chrom_key not in chrom_info.index:
+                    raise ValueError(f"Unknown chromosome: {chrom}")
+                end = int(chrom_info.loc[chrom_key, 'chromosome_length'])
             return GenomicRegion(chrom, start, end)
 
         genome_info = refgenome.get_genome_info(genome=genome)
