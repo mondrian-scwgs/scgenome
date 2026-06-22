@@ -721,6 +721,7 @@ def plot_profile(
         ax=ax,
         clip_on=True,
         **kwargs)
+    ax.set_xlabel('')
 
     region_mapper.setup_xaxis(ax)
 
