@@ -1234,7 +1234,7 @@ def plot_cn_rect(
                 vmin = data[hue].min()
             if vmax is None:
                 vmax = data[hue].max()
-            colormap = cm.get_cmap(cmap) if isinstance(cmap, str) else cmap
+            colormap = matplotlib.colormaps[cmap] if isinstance(cmap, str) else cmap  #cm.get_cmap(cmap) if isinstance(cmap, str) else cmap - eml fix
             data['color'] = data[hue].apply(
                 lambda a: colormap((a - vmin) / (vmax - vmin)) if vmax != vmin else colormap(0.5))
     elif color is not None:
