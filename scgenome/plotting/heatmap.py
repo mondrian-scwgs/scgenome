@@ -107,7 +107,7 @@ def plot_cell_cn_matrix(
         im = ax.imshow(X_colors, aspect='auto', interpolation='none', vmin=vmin, vmax=vmax, rasterized=rasterized)
 
     else:
-        cmap = matplotlib.cm.get_cmap(cmap)
+        cmap = matplotlib.colormaps[cmap]
         im = ax.imshow(X, aspect='auto', cmap=cmap, interpolation='none', vmin=vmin, vmax=vmax, rasterized=rasterized)
 
     mat_chrom_idxs = chr_start[genome_ordering][:, 1]
@@ -167,7 +167,7 @@ def map_catagorigal_colors(values, cmap=None):
             else:
                 cmap_name = 'hsv'
 
-        cmap = matplotlib.cm.get_cmap(cmap_name)
+        cmap = matplotlib.colormaps[cmap_name]
 
         level_colors = dict(zip(levels, cmap(np.linspace(0, 1, n_levels))))
 

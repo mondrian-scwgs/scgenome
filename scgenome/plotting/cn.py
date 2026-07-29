@@ -745,6 +745,79 @@ def plot_profile(
     return ax
 
 
+def plot_cn_profile(
+        adata: AnnData,
+        obs_id: str,
+        value_layer_name=None,
+        state_layer_name=None,
+        ax=None,
+        palette=None,
+        chromosome=None,
+        start=None,
+        end=None,
+        squashy=False,
+        **kwargs
+):
+    """Plot scatter points of copy number across the genome or a chromosome.
+
+    Parameters
+    ----------
+    adata : AnnData
+        copy number data
+    obs_id : str
+        observation to plot
+    value_layer_name : str, optional
+        layer with values for y axis, None for X, by default None
+    state_layer_name : str, optional
+        layer with states for colors, None for no color by state, by default None
+    ax : matplotlib.axes.Axes, optional
+        existing axess to plot into, by default None
+    palette : str, optional
+        color palette passed to sns.scatterplot
+    chromosome : str, optional
+        single chromosome plot, by default None
+    start : int, optional
+        start of plotting region
+    end : int, optional
+        end of plotting region
+    squashy : bool, optional
+        compress y axis, by default False
+    rawy : bool, optional
+        raw data on y axis, by default False
+    **kwargs :
+        kwargs for sns.scatterplot
+
+    Returns
+    -------
+    matplotlib.axes.Axes
+        Axes used for plotting
+
+    Examples
+    -------
+
+    .. plot::
+        :context: close-figs
+
+        import scgenome
+        adata = scgenome.datasets.OV2295_HMMCopy_reduced()
+        scgenome.pl.plot_cn_profile(adata, 'SA922-A90554B-R27-C43', value_layer_name='copy', state_layer_name='state')
+
+    """
+    return plot_cell_tcn(
+        adata,
+        cell_id=obs_id,
+        y=value_layer_name,
+        hue=state_layer_name,
+        ax=ax,
+        palette=palette,
+        chromosome=chromosome,
+        start=start,
+        end=end,
+        squashy=squashy,
+        **kwargs,
+    )
+
+
 def plot_rearrangement_arcs(
     ax,
     breakpoints,
@@ -1187,8 +1260,6 @@ def plot_cn_rect(
     matplotlib.axes.Axes
         axes with plotted rectangles
     """
-    import matplotlib.cm as cm
-
     if ax is None:
         ax = plt.gca()
 
@@ -1234,7 +1305,7 @@ def plot_cn_rect(
                 vmin = data[hue].min()
             if vmax is None:
                 vmax = data[hue].max()
-            colormap = cm.get_cmap(cmap) if isinstance(cmap, str) else cmap
+            colormap = matplotlib.colormaps[cmap] if isinstance(cmap, str) else cmap
             data['color'] = data[hue].apply(
                 lambda a: colormap((a - vmin) / (vmax - vmin)) if vmax != vmin else colormap(0.5))
     elif color is not None:
