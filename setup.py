@@ -12,8 +12,6 @@ setup(
     install_requires=[
         'anndata',
         'biopython',
-        'Click',
-        'csverve',
         'hdbscan',
         'matplotlib',
         'natsort',

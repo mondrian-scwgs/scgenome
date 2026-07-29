@@ -4,8 +4,6 @@ import numpy as np
 import anndata as ad
 import pyranges as pr
 
-import csverve
-
 from anndata import AnnData
 from pyranges import PyRanges
 from typing import Dict, Sequence
@@ -14,7 +12,7 @@ from pandas import DataFrame
 from ..utils import union_categories
 
 
-def read_dlp_hmmcopy(reads_filename, metrics_filename, sample_ids=None) -> AnnData:
+def read_dlp_hmmcopy(reads_filename, metrics_filename) -> AnnData:
     """ Read hmmcopy results from the DLP pipeline.
 
     Parameters
@@ -23,8 +21,6 @@ def read_dlp_hmmcopy(reads_filename, metrics_filename, sample_ids=None) -> AnnDa
         dlp pipeline reads filename
     metrics_filename (str):
         dlp pipeline metrics filename
-    sample_ids (list):
-        sample ids to load
 
     Returns
     -------
@@ -32,11 +28,10 @@ def read_dlp_hmmcopy(reads_filename, metrics_filename, sample_ids=None) -> AnnDa
         An instantiated AnnData Object.
     """
 
-    cn_data = csverve.read_csv(reads_filename)
-    metrics_data = csverve.read_csv(metrics_filename)
+    cn_data = csverve.read_csv(reads_filename, dtype={'chr': str, 'cell_id': str})
+    cn_data['chr'] = cn_data['chr'].astype(str).astype('category')
 
-    if cn_data['chr'].dtype.name != 'category':
-        cn_data['chr'] = cn_data['chr'].astype(str).astype('category')
+    metrics_data = csverve.read_csv(metrics_filename, dtype={'cell_id': str})
 
     union_categories([cn_data, metrics_data])
 
