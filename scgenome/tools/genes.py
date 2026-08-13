@@ -123,3 +123,35 @@ def aggregate_genes(
     return adata
 
 
+def get_gene_cn(
+    adata: AnnData,
+    genes: PyRanges,
+    gene_name: str,
+    layer: str=None) -> pd.Series:
+    """ Get copy number for a specific gene as a Series indexed by cell.
+
+    Parameters
+    ----------
+    adata : AnnData
+        copy number data
+    genes : PyRanges
+        gene data
+    gene_name : str
+        name of the gene to query
+    layer : str, optional
+        layer to use, by default None (uses X)
+
+    Returns
+    -------
+    pd.Series
+        per-cell copy number for the gene, indexed same as adata.obs
+    """
+    gene_pr = genes[genes.gene_name == gene_name]
+    if gene_pr.empty:
+        raise ValueError(f"Gene '{gene_name}' not found in genes")
+    gene_adata = aggregate_genes(adata, gene_pr, agg_layers=[layer] if layer else [])
+    if layer is not None:
+        values = gene_adata[:, 0].layers[layer].flatten()
+    else:
+        values = gene_adata[:, 0].X.flatten()
+    return pd.Series(values, index=adata.obs.index, name=gene_name)
