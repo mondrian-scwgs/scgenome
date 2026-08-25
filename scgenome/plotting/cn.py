@@ -1514,25 +1514,28 @@ def plot_pseudobulk_tcn(adata, ax=None, chromosome=None, region_mapper=None, **k
     matplotlib.axes.Axes
         axes used for plotting
     """
-    plot_data = aggregate_pseudobulk(adata, agg_layers={
-        'copy': np.nanmean,
-        'state': np.nanmedian,
-    })
-
     if ax is None:
         ax = plt.gca()
 
     kwargs.setdefault('alpha', 1.)
+    kwargs.setdefault('y', 'copy')
+    kwargs.setdefault('hue', 'state')
+    kwargs.setdefault('squashy', True)
+    kwargs.setdefault('hue_order', sorted(range(12)))
+
+    y_field = kwargs['y']
+    hue_field = kwargs['hue']
+
+    plot_data = aggregate_pseudobulk(adata, agg_layers={
+        y_field: np.nanmean,
+        hue_field: np.nanmedian,
+    })
 
     plot_profile(
         plot_data,
-        y='copy',
-        hue='state',
         chromosome=chromosome,
         region_mapper=region_mapper,
         ax=ax,
-        squashy=True,
-        hue_order=sorted(range(12)),
         **kwargs)
 
     ax.get_legend().set_title('Total CN state')
