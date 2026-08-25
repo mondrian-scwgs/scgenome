@@ -22,13 +22,13 @@ def plot_cell_cn_matrix(
         layer_name='state',
         cell_order_fields=(),
         ax=None,
-        raw=False,
         vmin=None,
         vmax=None,
         cmap=None,
         show_cell_ids=False,
         style='black',
-        rasterized=False):
+        rasterized=False,
+        raw=None):
     """ Plot a copy number matrix
 
     Parameters
@@ -41,18 +41,18 @@ def plot_cell_cn_matrix(
         columns of obs on which to sort cells, by default None
     ax : matplotlib.axes.Axes, optional
         existing axis to plot into, by default None
-    raw : bool, optional
-        raw plotting, no integer color map, by default False
     vmin, vmax : float, optional
-        for raw=True, vmin and vmax define the data range that the colormap covers, see `matplotlib.pyplot.imshow`
-    cmap : str, optional
-        matplotlib colormap name, only used if raw=True
+        vmin and vmax define the data range that the colormap covers, see `matplotlib.pyplot.imshow`
+    cmap : str or matplotlib.colors.Colormap, optional
+        colormap to use; if None, use the default discrete CN palette
     show_cell_ids : bool, optional
         show cell ids on heatmap axis, by default False
     style : str, optional, default 'black'
         style for spines and chromosome dividing lines and other plot elements
     rasterized : bool, optional
         rasterize the plot, by default False
+    raw : bool, optional
+        deprecated, use cmap instead
 
     Returns
     -------
@@ -71,11 +71,14 @@ def plot_cell_cn_matrix(
 
     """
 
+    if raw is not None:
+        import warnings
+        warnings.warn('raw is deprecated, pass cmap to use a continuous colormap', DeprecationWarning, stacklevel=2)
+        if raw and cmap is None:
+            cmap = 'viridis'
+
     if ax is None:
         ax = plt.gca()
-
-    if cmap is None:
-        cmap = 'viridis'
 
     # Order the chromosomes
     genome_info = scgenome.refgenome.get_genome_info(adata)
@@ -102,12 +105,13 @@ def plot_cell_cn_matrix(
     else:
         X = adata.X.copy()
 
-    if not raw:
+    if cmap is None:
         X_colors = cn_colors.map_cn_colors(X)
         im = ax.imshow(X_colors, aspect='auto', interpolation='none', vmin=vmin, vmax=vmax, rasterized=rasterized)
 
     else:
-        cmap = matplotlib.colormaps[cmap]
+        if isinstance(cmap, str):
+            cmap = matplotlib.colormaps[cmap]
         im = ax.imshow(X, aspect='auto', cmap=cmap, interpolation='none', vmin=vmin, vmax=vmax, rasterized=rasterized)
 
     mat_chrom_idxs = chr_start[genome_ordering][:, 1]
@@ -294,13 +298,13 @@ def plot_cell_cn_matrix_fig(
         var_annotation_fields=None,
         var_annotation_cmap=None,
         fig=None,
-        raw=False,
         vmin=None,
         vmax=None,
         cmap=None,
         show_cell_ids=False,
         show_subsets=False,
-        style='black'):
+        style='black',
+        raw=None):
     """ Plot a copy number matrix
 
     Parameters
@@ -317,12 +321,10 @@ def plot_cell_cn_matrix_fig(
         column of obs to use as an annotation colorbar, by default 'cluster_id'
     fig : matplotlib.figure.Figure, optional
         existing figure to plot into, by default None
-    raw : bool, optional
-        raw plotting, no integer color map, by default False
     vmin, vmax : float, optional
-        for raw=True, vmin and vmax define the data range that the colormap covers, see `matplotlib.pyplot.imshow`
-    cmap : str, optional
-        matplotlib colormap name, only used if raw=True
+        vmin and vmax define the data range that the colormap covers, see `matplotlib.pyplot.imshow`
+    cmap : str or matplotlib.colors.Colormap, optional
+        colormap to use; if None, use the default discrete CN palette
     show_cell_ids : bool, optional
         show cell ids on heatmap axis, by default False
     show_subsets : bool, optional
@@ -459,14 +461,14 @@ def plot_cell_cn_matrix_fig(
     g = plot_cell_cn_matrix(
         adata, layer_name=layer_name,
         cell_order_fields=cell_order_fields,
-        ax=heatmap_ax, raw=raw, vmin=vmin, vmax=vmax, cmap=cmap,
+        ax=heatmap_ax, vmin=vmin, vmax=vmax, cmap=cmap, raw=raw,
         show_cell_ids=show_cell_ids,
         style=style)
 
     adata = g['adata']
     im = g['im']
 
-    if not raw:
+    if cmap is None and not raw:
         legend_info = {'ax_legend': ax_legend}
         legend_info['legend'] = cn_colors.cn_legend(ax_legend, title=layer_name)
 
