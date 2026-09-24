@@ -41,12 +41,22 @@ if parse_version(version).is_devrelease:
 templates_path = ['_templates']
 master_doc = 'index'
 default_role = 'literal'
-exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
+exclude_patterns = [
+    '_build',
+    'Thumbs.db',
+    '.DS_Store',
+    # The jupytext .md files under notebooks/ are the source of truth. Any
+    # paired .ipynb on disk would otherwise collide with them for the same
+    # docname ("multiple files found for the document ...").
+    'notebooks/*.ipynb',
+]
 pygments_style = 'sphinx'
 source_suffix = [".rst", ".md"]
 
 extensions = [
-    'myst_parser',
+    # myst_nb supersedes myst_parser (it enables it internally) and additionally
+    # executes the gallery pages so their figures appear in the built docs
+    'myst_nb',
     'sphinx.ext.autodoc',
     'sphinx.ext.intersphinx',
     'sphinx.ext.doctest',
@@ -75,9 +85,30 @@ todo_include_todos = False
 
 typehints_defaults = 'braces'
 
+# The gallery pages under notebooks/ are jupytext markdown, not MyST-NB
+# markdown, so their ```python fences are only recognised as code cells when
+# jupytext parses them. Without this they render as inert code blocks with no
+# figures.
+nb_custom_formats = {'.md': ['jupytext.reads', {'fmt': 'md'}]}
+
+# 'auto' executes notebooks that have no stored outputs. Jupytext markdown never
+# stores outputs, so in practice every gallery page is executed on each build.
+nb_execution_mode = 'auto'
+nb_execution_timeout = 300
+
+# A gallery page that stops working should fail the build rather than publish
+# a traceback where a figure should be
+nb_execution_raise_on_error = True
+
 intersphinx_mapping = {
     'python': ('https://docs.python.org/3/', None),
     'sphinx': ('https://www.sphinx-doc.org/en/master/', None),
+    'numpy': ('https://numpy.org/doc/stable/', None),
+    'pandas': ('https://pandas.pydata.org/docs/', None),
+    'matplotlib': ('https://matplotlib.org/stable/', None),
+    'sklearn': ('https://scikit-learn.org/stable/', None),
+    'anndata': ('https://anndata.readthedocs.io/en/stable/', None),
+    'scanpy': ('https://scanpy.readthedocs.io/en/stable/', None),
 }
 
 # -- Options for HTML output ----------------------------------------------
@@ -128,6 +159,16 @@ nitpick_ignore = [
     ('py:class', 'anndata._core.anndata.AnnData'),
     ('py:class', 'DataFrame'),
     ('py:class', 'Sequence'),
+    # Docstring type names that refer to scgenome's own helpers or to loose
+    # duck-typed conventions, neither of which resolve as classes
+    ('py:class', 'RefGenomeInfo'),
+    ('py:class', 'RegionMapper'),
+    ('py:class', 'Legend'),
+    ('py:class', 'color'),
+    ('py:class', 'function'),
+    ('py:class', 'callable'),
+    ('py:class', 'pd.Series'),
+    ('py:class', 'matplotlib.colors.Colormap'),
     ('py:class', 'PyRanges'),
     ('py:class', 'pyranges.PyRanges'),
     ('py:class', 'pyrange.PyRanges'),

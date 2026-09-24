@@ -37,6 +37,30 @@ def pca_loadings(adata: AnnData, layer=None, n_components=None, random_state=100
     adata.obsm['X_pca'] : transformed coordinates (cells x components)
     adata.varm['PCs'] : PCA loadings (bins x components)
     adata.uns['pca'] : dict with variance, variance_ratio, params, etc.
+
+    Notes
+    -----
+    Missing values are filled and the matrix is standardized before
+    decomposition. Loadings land in `varm['PCs']` as bins by components, so
+    transposing them gives a matrix aligned with `adata.var` that can be plotted
+    along the genome.
+
+    Examples
+    --------
+
+    >>> import scgenome
+    >>> adata = scgenome.datasets.OV2295_HMMCopy_reduced()
+    >>> adata = scgenome.tl.pca_loadings(adata, layer='copy', n_components=3)
+
+    Cell coordinates are cells by components, loadings are bins by components:
+
+    >>> adata.obsm['X_pca'].shape
+    (25, 3)
+    >>> adata.varm['PCs'].shape
+    (6206, 3)
+
+    >>> adata.uns['pca']['variance_ratio'].round(3).tolist()
+    [0.605, 0.14, 0.082]
     """
 
     if layer is None:

@@ -47,8 +47,9 @@ def plot_cell_cn_matrix(
         colormap to use; if None, use the default discrete CN palette
     show_cell_ids : bool, optional
         show cell ids on heatmap axis, by default False
-    style : str, optional, default 'black'
-        style for spines and chromosome dividing lines and other plot elements
+    style : str, optional
+        style for spines and chromosome dividing lines and other plot elements,
+        by default 'black'
     rasterized : bool, optional
         rasterize the plot, by default False
     raw : bool, optional
@@ -266,6 +267,16 @@ def _plot_continuous_legend(ax_legend, im, title):
     return annotation_info
 
 
+def _is_discrete(series):
+    """ Whether an annotation column should get a discrete rather than continuous colormap.
+
+    Checking against a fixed list of dtype names misses pandas >= 3 string
+    columns, whose dtype is named 'str' rather than 'object'. Treat anything
+    non-numeric as discrete, and bool as discrete despite being numeric.
+    """
+    return series.dtype.name == 'bool' or not pd.api.types.is_numeric_dtype(series)
+
+
 def _plot_continuous_annotation(values, ax, ax_legend, title, horizontal=False, cmap=None):
     if cmap is None:
         cmap = 'Reds'
@@ -329,8 +340,9 @@ def plot_cell_cn_matrix_fig(
         show cell ids on heatmap axis, by default False
     show_subsets : bool, optional
         show subset/superset categoricals to allow identification of cell sets
-    style : str, optional, default 'black'
-        style for spines and chromosome dividing lines and other plot elements
+    style : str, optional
+        style for spines and chromosome dividing lines and other plot elements,
+        by default 'black'
 
     Returns
     -------
@@ -486,7 +498,7 @@ def plot_cell_cn_matrix_fig(
     annotation_info = {}
 
     for ax, ax_legend, annotation_field in zip(axes[heatmap_ax_row_idx, heatmap_ax_col_idx+2:], axes_legends[1:], annotation_fields):
-        if adata.obs[annotation_field].dtype.name in ('category', 'object', 'bool'):
+        if _is_discrete(adata.obs[annotation_field]):
             values = adata.obs[[annotation_field]].values
             annotation_info[annotation_field] = _plot_categorical_annotation(values, ax, ax_legend, annotation_field, cmap=annotation_cmap.get(annotation_field))
 
@@ -498,7 +510,7 @@ def plot_cell_cn_matrix_fig(
             ax.spines[:].set_visible(False)
 
     for ax, ax_legend, annotation_field in zip(axes[:, heatmap_ax_col_idx], axes_legends[1+len(annotation_fields):], var_annotation_fields):
-        if adata.var[annotation_field].dtype.name in ('category', 'object', 'bool'):
+        if _is_discrete(adata.var[annotation_field]):
             values = adata.var[[annotation_field]].copy().values.T
             annotation_info[annotation_field] = _plot_categorical_annotation(values, ax, ax_legend, annotation_field, horizontal=True, cmap=var_annotation_cmap.get(annotation_field))
 

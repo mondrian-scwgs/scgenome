@@ -54,6 +54,30 @@ def calculate_filter_metrics(
     adata.obs['filter_is_s_phase'] : True if cell is not in S-phase (optional)
     adata.obsm['copy_state_diff'] : absolute difference between copy and state
     adata.obsm['copy_state_diff_mean'] : mean copy-state difference per cell
+
+    Notes
+    -----
+    A filter whose input obs column is absent is skipped with a warning rather
+    than raising, so the set of `filter_*` columns produced depends on what
+    metadata the object carries.
+
+    Examples
+    --------
+
+    >>> import scgenome
+    >>> adata = scgenome.datasets.OV2295_HMMCopy_reduced()
+    >>> adata = scgenome.pp.calculate_filter_metrics(adata, quality_score_threshold=0.9)
+
+    This dataset has no `is_s_phase` column, so only three filters are computed:
+
+    >>> sorted(c for c in adata.obs.columns if c.startswith('filter_'))
+    ['filter_copy_state_diff', 'filter_quality', 'filter_reads']
+
+    Inspect a filter before applying it with
+    :func:`~scgenome.pp.filter_cells`:
+
+    >>> int(adata.obs['filter_quality'].sum()), adata.shape[0]
+    (23, 25)
     """
     validate_adata(
         adata,
@@ -113,6 +137,28 @@ def filter_cells(
     Modifies
     --------
     Subsets adata to cells passing all filter criteria.
+
+    Notes
+    -----
+    Filters named in `filters` that are absent from obs are skipped with a
+    warning. Run :func:`~scgenome.pp.calculate_filter_metrics` first to create
+    them. The return value is an AnnData view; call `.copy()` if you want to
+    annotate it without triggering anndata's view warnings.
+
+    Examples
+    --------
+
+    >>> import scgenome
+    >>> adata = scgenome.datasets.OV2295_HMMCopy_reduced()
+    >>> adata = scgenome.pp.calculate_filter_metrics(adata, quality_score_threshold=0.9)
+    >>> adata.shape
+    (25, 6206)
+
+    Apply a single filter rather than the default set:
+
+    >>> adata = scgenome.pp.filter_cells(adata, filters=['filter_quality'])
+    >>> adata.shape
+    (23, 6206)
     """
     validate_adata(adata, caller='filter_cells')
 

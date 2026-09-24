@@ -8,3 +8,5 @@ sourceme
 build
 dist
 __pycache__/
+docs/_build
+docs/generated

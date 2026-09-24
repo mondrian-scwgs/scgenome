@@ -686,7 +686,7 @@ def plot_profile(
 
         import scgenome
         adata = scgenome.datasets.OV2295_HMMCopy_reduced()
-        scgenome.pl.plot_profile(adata[:, adata.var['gc'] > 0], 'gc')
+        scgenome.pl.plot_profile(adata[:, adata.var['gc'] > 0].var, 'gc')
 
     """
 
@@ -1432,7 +1432,9 @@ def plot_cell_tcn(
         region_mapper=region_mapper,
         **kwargs)
 
-    ax.get_legend().set_title('Total CN state')
+    # No hue means no legend to title
+    if ax.get_legend() is not None:
+        ax.get_legend().set_title('Total CN state')
 
     return ax
 

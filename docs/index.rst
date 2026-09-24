@@ -7,8 +7,9 @@ data built on `anndata <https://anndata.readthedocs.io>`_ and inspired by
 visualization, and clustering functionality and can be used to analyze
 copy number, allele specific copy number, SNV and breakpoint features.
 
-Check out the :doc:`concepts` section for further information, including
-how to :doc:`install` the project.
+Start with the :doc:`quickstart` for an end-to-end walkthrough, then read
+:doc:`concepts` for the data model and conventions. See :doc:`install` for
+installation instructions.
 
 .. note::
 
@@ -22,6 +23,7 @@ Contents:
    :glob:
 
    install
+   quickstart
    concepts
    api
    examples

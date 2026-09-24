@@ -16,7 +16,7 @@ def OV2295_HMMCopy_reduced() -> AnnData:
     """
 
     adata_filename = importlib.resources.files('scgenome').joinpath('datasets/data/OV2295_HMMCopy_reduced.h5ad')
-    return ad.read(adata_filename)
+    return ad.read_h5ad(adata_filename)
 
 
 def OV_051_Medicc2_reduced() -> AnnData:
@@ -29,4 +29,4 @@ def OV_051_Medicc2_reduced() -> AnnData:
     """
 
     adata_filename = importlib.resources.files('scgenome').joinpath('datasets/data/OV_051_Medicc2_reduced.h5ad')
-    return ad.read(adata_filename)
+    return ad.read_h5ad(adata_filename)

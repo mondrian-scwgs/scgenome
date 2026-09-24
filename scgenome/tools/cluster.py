@@ -112,26 +112,35 @@ def cluster_cells(
     adata.obs['cluster_size'] : number of cells in each cluster
     adata.uns['clustering'] : dict with clustering parameters
 
+    Notes
+    -----
+    Every k from `min_k` to `max_k` is fit and the one with the best BIC is
+    kept, so runtime scales with `max_k`. Both bounds are clamped to the number
+    of cells.
+
     Examples
-    -------
+    --------
+
+    Cluster on the continuous copy number layer, capping the search at k=4:
 
     >>> import scgenome
-    >>> import anndata as ad
-    >>> import numpy as np
-    >>> adata = ad.AnnData(np.array([
-    ...    [3, 3, 3, 6, 6],
-    ...    [1, 1, 1, 2, 2],
-    ...    [1, 22, 1, 2, 2],
-    ...    [1, 3, 3, 5, 5],
-    ... ]).astype(np.float32))
-    >>> adata = scgenome.tl.cluster_cells_kmeans(adata, layer_name=None, max_k=3)
-    >>> adata.obs['cluster_id']
-    0    0
-    1    2
-    2    1
-    3    0
-    Name: cluster_id, dtype: category
-    Categories (3, int64): [0, 1, 2]
+    >>> adata = scgenome.datasets.OV2295_HMMCopy_reduced()
+    >>> adata = scgenome.tl.cluster_cells(adata, layer_name='copy', max_k=4)
+    >>> adata.obs['cluster_id'].nunique()
+    4
+    >>> sorted(int(n) for n in adata.obs['cluster_size'].unique())
+    [1, 6, 8, 10]
+
+    The selected k and the search parameters are recorded on the object:
+
+    >>> adata.uns['clustering']['params']['opt_k']
+    4
+
+    Passing a list of layer names concatenates them along the bin axis before
+    clustering, which is how you cluster on allele-specific copy number split
+    across two layers::
+
+        adata = scgenome.tl.cluster_cells(adata, layer_name=['A', 'B'])
 
     """
     validate_adata(adata, caller='cluster_cells')
@@ -315,11 +324,9 @@ def aggregate_clusters(
                 .sort_index())
         dtypes = X.dtypes.unique()
         assert len(dtypes) == 1
-        dtype = dtypes[0]
 
     else:
         X = None
-        dtype = None
 
     layer_data = None
     if agg_layers is not None:
@@ -353,7 +360,6 @@ def aggregate_clusters(
 
     adata = ad.AnnData(
         X,
-        dtype=dtype,
         obs=obs_data,
         var=adata.var,
         layers=layer_data,
@@ -469,6 +475,20 @@ def compute_umap(
     --------
     adata.obs['UMAP1'] : UMAP first component
     adata.obs['UMAP2'] : UMAP second component
+
+    Notes
+    -----
+    Only the first two components are written to obs, regardless of
+    `n_components`. `n_neighbors` must be smaller than the number of cells.
+
+    Examples
+    --------
+
+    >>> import scgenome
+    >>> adata = scgenome.datasets.OV2295_HMMCopy_reduced()
+    >>> adata = scgenome.tl.compute_umap(adata, layer_name='copy', n_neighbors=5)
+    >>> adata.obs[['UMAP1', 'UMAP2']].shape
+    (25, 2)
     """
 
     if layer_name is not None:

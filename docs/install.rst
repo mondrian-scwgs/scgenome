@@ -24,7 +24,13 @@ the repo directory:
 
     virtualenv venv
     source venv/bin/activate
-    python setup.py develop
+    pip install -e .
 
 Docker containers are available at https://quay.io/repository/mondrianscwgs/scgenome
+
+Once installed, verify the install and continue with the :doc:`quickstart`:
+
+.. code-block::
+
+    python -c "import scgenome; print(scgenome.datasets.OV2295_HMMCopy_reduced())"
 

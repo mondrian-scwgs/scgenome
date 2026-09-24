@@ -44,6 +44,32 @@ def sort_cells(
     Modifies
     --------
     adata.obs['cell_order'] : integer ordering of cells by hierarchical clustering
+
+    Notes
+    -----
+    The rows of `adata` are not reordered. `cell_order` is a column that
+    plotting functions sort on, so several orderings can coexist on one object
+    and can be combined for a nested sort. If `cell_ids` restricts the sort to a
+    subset, cells outside it get `NaN`.
+
+    Examples
+    --------
+
+    >>> import scgenome
+    >>> adata = scgenome.datasets.OV2295_HMMCopy_reduced()
+    >>> adata = scgenome.tl.sort_cells(adata, layer_name='copy')
+
+    The result is a permutation of the cell indices:
+
+    >>> sorted(adata.obs['cell_order'].astype(int)) == list(range(adata.shape[0]))
+    True
+
+    Combine with a cluster assignment to group cells first and order within
+    each group second::
+
+        scgenome.pl.plot_cell_cn_matrix(
+            adata, cell_order_fields=['cluster_id', 'cell_order'])
+
     """
     if cell_ids is None:
         cell_ids = adata.obs.index

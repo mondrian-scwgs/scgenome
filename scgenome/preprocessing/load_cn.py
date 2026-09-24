@@ -17,9 +17,9 @@ def read_dlp_hmmcopy(reads_filename, metrics_filename) -> AnnData:
 
     Parameters
     ----------
-    reads_filename (str):
+    reads_filename : str
         dlp pipeline reads filename
-    metrics_filename (str):
+    metrics_filename : str
         dlp pipeline metrics filename
 
     Returns
@@ -122,14 +122,11 @@ def create_cn_anndata(
             .reindex(X.index))
     cell_data.index = cell_data.index.astype(str)
 
-    dtype = None
     if X.empty:
-        X = np.empty((0, 0))
-        dtype = float
+        X = np.empty((0, 0), dtype=float)
 
     adata = ad.AnnData(
         X,
-        dtype=dtype,
         obs=cell_data,
         var=bin_data,
         layers=layers,
