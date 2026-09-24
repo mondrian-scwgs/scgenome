@@ -1490,7 +1490,9 @@ def plot_cell_ascn(adata, cell_id, ax=None, chromosome=None, region_mapper=None,
     ax.set_ylim(-0.05, 1.05)
     ax.spines['left'].set_bounds(0, 1)
 
-    ax.get_legend().set_title('AS CN state')
+    # No hue means no legend to title
+    if ax.get_legend() is not None:
+        ax.get_legend().set_title('AS CN state')
 
     return ax
 
@@ -1540,7 +1542,9 @@ def plot_pseudobulk_tcn(adata, ax=None, chromosome=None, region_mapper=None, **k
         ax=ax,
         **kwargs)
 
-    ax.get_legend().set_title('Total CN state')
+    # No hue means no legend to title
+    if ax.get_legend() is not None:
+        ax.get_legend().set_title('Total CN state')
 
     return ax
 
@@ -1596,6 +1600,8 @@ def plot_pseudobulk_ascn(adata, ax=None, chromosome=None, region_mapper=None, **
 
     ax.set_ylim(-0.05, 1.05)
     ax.spines['left'].set_bounds(0, 1)
-    ax.get_legend().set_title('AS CN state')
+    # No hue means no legend to title
+    if ax.get_legend() is not None:
+        ax.get_legend().set_title('AS CN state')
 
     return ax

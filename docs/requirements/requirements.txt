@@ -5,6 +5,6 @@ sphinx_gallery
 myst-nb
 jupytext
 sphinx_autodoc_typehints
-scanpydoc
+scanpydoc==0.9.5
 sphinx-rtd-theme
 sphinx-book-theme

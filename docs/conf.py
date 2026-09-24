@@ -27,15 +27,24 @@ project = 'scgenome'
 copyright = '2018, McPherson'
 author = 'Andrew McPherson'
 
-release = '0.0'
-version = '0.0.7'
+# Derived from the installed package rather than hardcoded, which had drifted to
+# 0.0.7 while the package was at 0.0.20. versioneer produces things like
+# '0.0.20+36.g6d32118' for non-tagged builds; keep the full string as the release
+# and the short X.Y.Z as the version.
+release = scgenome.__version__
 
+if release.startswith('0+'):
+    # versioneer reports '0+unknown' when there is no git metadata and no
+    # baked-in _version.py, e.g. a bare source export. Say so rather than
+    # rendering a misleading '0.0.0'.
+    release = version = 'unknown'
 
+else:
+    _parsed = parse_version(release)
+    version = f'{_parsed.major}.{_parsed.minor}.{_parsed.micro}'
 
-# Bumping the version updates all docs, so don't do that
-if parse_version(version).is_devrelease:
-    parsed = parse_version(version)
-    version = f"{parsed.major}.{parsed.minor}.{parsed.micro}.dev"
+    if _parsed.is_devrelease:
+        version += '.dev'
 
 # default settings
 templates_path = ['_templates']
