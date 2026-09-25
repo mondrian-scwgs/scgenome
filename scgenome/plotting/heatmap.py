@@ -25,6 +25,7 @@ def plot_cell_cn_matrix(
         vmin=None,
         vmax=None,
         cmap=None,
+        palette=None,
         show_cell_ids=False,
         style='black',
         rasterized=False,
@@ -42,9 +43,16 @@ def plot_cell_cn_matrix(
     ax : matplotlib.axes.Axes, optional
         existing axis to plot into, by default None
     vmin, vmax : float, optional
-        vmin and vmax define the data range that the colormap covers, see `matplotlib.pyplot.imshow`
+        vmin and vmax define the data range that the colormap covers, see `matplotlib.pyplot.imshow`.
+        Applies to `cmap` only, discrete palettes map values to colors directly.
     cmap : str or matplotlib.colors.Colormap, optional
-        colormap to use; if None, use the default discrete CN palette
+        continuous colormap to use, mutually exclusive with palette
+    palette : str or dict, optional
+        discrete palette to use, 'cn' for total copy number states,
+        'allele_state' for allele specific states, or a dict mapping value to
+        color, by default 'cn'. Mutually exclusive with cmap. Unlike cmap, a
+        palette maps values to colors directly, so colors do not depend on the
+        range of values present.
     show_cell_ids : bool, optional
         show cell ids on heatmap axis, by default False
     style : str, optional
@@ -75,8 +83,11 @@ def plot_cell_cn_matrix(
     if raw is not None:
         import warnings
         warnings.warn('raw is deprecated, pass cmap to use a continuous colormap', DeprecationWarning, stacklevel=2)
-        if raw and cmap is None:
+        if raw and cmap is None and palette is None:
             cmap = 'viridis'
+
+    if cmap is not None and palette is not None:
+        raise ValueError('cannot provide both cmap and palette')
 
     if ax is None:
         ax = plt.gca()
@@ -107,10 +118,14 @@ def plot_cell_cn_matrix(
         X = adata.X.copy()
 
     if cmap is None:
-        X_colors = cn_colors.map_cn_colors(X)
-        im = ax.imshow(X_colors, aspect='auto', interpolation='none', vmin=vmin, vmax=vmax, rasterized=rasterized)
+        # Discrete palettes map values to colors directly, bypassing any norm,
+        # so the same value gets the same color regardless of what else is in X
+        palette_info = cn_colors.resolve_palette(palette if palette is not None else 'cn')
+        X_colors = palette_info['mapper'](X)
+        im = ax.imshow(X_colors, aspect='auto', interpolation='none', rasterized=rasterized)
 
     else:
+        palette_info = None
         if isinstance(cmap, str):
             cmap = matplotlib.colormaps[cmap]
         im = ax.imshow(X, aspect='auto', cmap=cmap, interpolation='none', vmin=vmin, vmax=vmax, rasterized=rasterized)
@@ -147,6 +162,7 @@ def plot_cell_cn_matrix(
         'ax': ax,
         'im': im,
         'adata': adata,
+        'palette_info': palette_info,
     }
 
 
@@ -312,6 +328,7 @@ def plot_cell_cn_matrix_fig(
         vmin=None,
         vmax=None,
         cmap=None,
+        palette=None,
         show_cell_ids=False,
         show_subsets=False,
         style='black',
@@ -333,9 +350,14 @@ def plot_cell_cn_matrix_fig(
     fig : matplotlib.figure.Figure, optional
         existing figure to plot into, by default None
     vmin, vmax : float, optional
-        vmin and vmax define the data range that the colormap covers, see `matplotlib.pyplot.imshow`
+        vmin and vmax define the data range that the colormap covers, see `matplotlib.pyplot.imshow`.
+        Applies to `cmap` only, discrete palettes map values to colors directly.
     cmap : str or matplotlib.colors.Colormap, optional
-        colormap to use; if None, use the default discrete CN palette
+        continuous colormap to use, mutually exclusive with palette
+    palette : str or dict, optional
+        discrete palette to use, 'cn' for total copy number states,
+        'allele_state' for allele specific states, or a dict mapping value to
+        color, by default 'cn'. Mutually exclusive with cmap.
     show_cell_ids : bool, optional
         show cell ids on heatmap axis, by default False
     show_subsets : bool, optional
@@ -473,16 +495,20 @@ def plot_cell_cn_matrix_fig(
     g = plot_cell_cn_matrix(
         adata, layer_name=layer_name,
         cell_order_fields=cell_order_fields,
-        ax=heatmap_ax, vmin=vmin, vmax=vmax, cmap=cmap, raw=raw,
+        ax=heatmap_ax, vmin=vmin, vmax=vmax, cmap=cmap, palette=palette, raw=raw,
         show_cell_ids=show_cell_ids,
         style=style)
 
     adata = g['adata']
     im = g['im']
+    palette_info = g['palette_info']
 
-    if cmap is None and not raw:
+    # A discrete palette gets a patch legend of its levels, a continuous
+    # colormap gets a colorbar
+    if palette_info is not None:
+        title = palette_info['title'] if palette_info['title'] is not None else layer_name
         legend_info = {'ax_legend': ax_legend}
-        legend_info['legend'] = cn_colors.cn_legend(ax_legend, title=layer_name)
+        legend_info['legend'] = palette_info['legend'](ax_legend, title)
 
     else:
         legend_info = _plot_continuous_legend(ax_legend, im, layer_name)
@@ -531,3 +557,110 @@ def plot_cell_cn_matrix_fig(
         'legend_info': legend_info,
         'annotation_info': annotation_info,
     }
+
+
+def _prepare_ascn_adata(adata, use_allele_cn_mask=True):
+    """ Subset to bins with allele specific copy number and add the state layer
+
+    Does not modify the input adata.
+    """
+    if use_allele_cn_mask and 'has_allele_cn' in adata.var:
+        adata = adata[:, adata.var['has_allele_cn'].values.astype(bool)]
+
+    if 'allele_state' not in adata.layers:
+        # Copy so that adding the layer does not modify the caller's adata, and
+        # so that we are not adding a layer to a view
+        adata = adata.copy()
+        adata = cn_colors.add_allele_state_layer(adata)
+
+    return adata
+
+
+def plot_cell_ascn_matrix(
+        adata: AnnData,
+        use_allele_cn_mask=True,
+        **kwargs):
+    """ Plot an allele specific copy number matrix
+
+    Plots the allele specific state of each bin in each cell, colored by the
+    allele state palette. Adds `layers['allele_state']` if not already present,
+    and restricts to bins with allele specific copy number if `var` has a
+    `has_allele_cn` column.
+
+    Parameters
+    ----------
+    adata : AnnData
+        copy number data with layers['A'] and layers['B']
+    use_allele_cn_mask : bool, optional
+        restrict to bins where var['has_allele_cn'], if that column exists,
+        by default True
+    **kwargs : dict
+        additional arguments passed to `plot_cell_cn_matrix`
+
+    Returns
+    -------
+    dict
+        Dictionary of plot and data elements
+
+    Examples
+    -------
+
+    .. plot::
+        :context: close-figs
+
+        import scgenome
+        adata = scgenome.datasets.OV081_Signals_reduced()
+        scgenome.pl.plot_cell_ascn_matrix(adata, cell_order_fields=['cell_order'])
+
+    """
+    adata = _prepare_ascn_adata(adata, use_allele_cn_mask=use_allele_cn_mask)
+
+    return plot_cell_cn_matrix(
+        adata, layer_name='allele_state', palette='allele_state', **kwargs)
+
+
+def plot_cell_ascn_matrix_fig(
+        adata: AnnData,
+        use_allele_cn_mask=True,
+        **kwargs):
+    """ Plot an allele specific copy number matrix with annotations and legend
+
+    Plots the allele specific state of each bin in each cell, colored by the
+    allele state palette. Adds `layers['allele_state']` if not already present,
+    and restricts to bins with allele specific copy number if `var` has a
+    `has_allele_cn` column.
+
+    Parameters
+    ----------
+    adata : AnnData
+        copy number data with layers['A'] and layers['B']
+    use_allele_cn_mask : bool, optional
+        restrict to bins where var['has_allele_cn'], if that column exists,
+        by default True
+    **kwargs : dict
+        additional arguments passed to `plot_cell_cn_matrix_fig`
+
+    Returns
+    -------
+    dict
+        Dictionary of plot and data elements
+
+    Examples
+    -------
+
+    .. plot::
+        :context: close-figs
+
+        import scgenome
+        adata = scgenome.datasets.OV081_Signals_reduced()
+
+        g = scgenome.pl.plot_cell_ascn_matrix_fig(
+            adata,
+            cell_order_fields=['cell_order'],
+            annotation_fields=['cluster_id', 'n_wgd'])
+
+    """
+    adata = _prepare_ascn_adata(adata, use_allele_cn_mask=use_allele_cn_mask)
+
+    return plot_cell_cn_matrix_fig(
+        adata, layer_name='allele_state', palette='allele_state', **kwargs)

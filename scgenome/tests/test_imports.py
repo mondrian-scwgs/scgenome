@@ -16,7 +16,11 @@ def test_imports():
     print(scgenome.pl.plot_profile)
     print(scgenome.pl.plot_cell_cn_matrix)
     print(scgenome.pl.plot_cell_cn_matrix_fig)
+    print(scgenome.pl.plot_cell_ascn_matrix)
+    print(scgenome.pl.plot_cell_ascn_matrix_fig)
     print(scgenome.pl.cn_legend)
+    print(scgenome.pl.allele_state_legend)
+    print(scgenome.pl.add_allele_state_layer)
     print(scgenome.pl.plot_gc_reads)
     print(scgenome.pl.plot_tree_cn)
 
