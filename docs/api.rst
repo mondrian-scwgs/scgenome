@@ -207,6 +207,8 @@ Small bundled datasets for experimentation and for the examples in these docs.
 
    datasets.OV2295_HMMCopy_reduced
    datasets.OV_051_Medicc2_reduced
+   datasets.OV081_Signals_reduced
+   datasets.OV081_breakpoints
 
 
 Reference genome: `refgenome`

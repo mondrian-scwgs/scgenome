@@ -95,6 +95,11 @@ scgenome.pl.plot_cn_profile(adata, cell_id, value_layer_name='copy', state_layer
 
 - `scgenome.datasets.OV2295_HMMCopy_reduced()` — HMMCopy CN data with layers['copy','state'] and QC metrics
 - `scgenome.datasets.OV_051_Medicc2_reduced()` — Medicc2 CN data
+- `scgenome.datasets.OV081_Signals_reduced()` — signals allele specific CN, adds layers['A','B','BAF','alleleA','alleleB','totalcounts']; the only bundled dataset supporting `pl.plot_cell_ascn` / `pl.plot_pseudobulk_ascn`
+- `scgenome.datasets.OV081_breakpoints()` — DataFrame of somatic rearrangements matching OV081, for `pl.plot_rearrangement_arcs`
+
+Regenerate the OV081 files with `scripts/make_OV081_signals_reduced.py` (needs the
+full source data, which is not in the repo).
 
 ## Error Handling
 

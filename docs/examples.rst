@@ -16,7 +16,22 @@ Plotting
 :doc:`notebooks/cell_plotting`
     Copy number profiles for individual cells along the genome: colouring by
     integer state, zooming to a chromosome or region, non-linear y-axis
-    compression for amplifications, and plotting per-bin covariates such as GC.
+    compression for amplifications, segment plots, and plotting per-bin
+    covariates such as GC.
+
+:doc:`notebooks/allele_specific_plotting`
+    B allele frequency and allele specific states, distinguishing balanced
+    changes from loss of heterozygosity, and aggregating cells into pseudobulk
+    total and allele specific profiles.
+
+:doc:`notebooks/multi_region_plotting`
+    Laying several disjoint genomic regions out on one axis with
+    ``RegionMapper``, so that plots can focus on the chromosomes and intervals
+    that matter.
+
+:doc:`notebooks/rearrangements`
+    Structural variant breakpoints drawn as arcs over a copy number profile,
+    within one chromosome and between several regions.
 
 :doc:`notebooks/explore_pca`
     PCA over a copy number matrix: cells in component space, and per-bin
@@ -29,4 +44,7 @@ Plotting
 
    notebooks/heatmap
    notebooks/cell_plotting
+   notebooks/allele_specific_plotting
+   notebooks/multi_region_plotting
+   notebooks/rearrangements
    notebooks/explore_pca
