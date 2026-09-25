@@ -51,6 +51,17 @@ else:
     if _parsed.is_devrelease:
         version += '.dev'
 
+    elif _parsed.local:
+        # versioneer's pep440 style records the distance from the last tag in
+        # the local segment, so '0.0.22+5.gabc1234' is five commits past
+        # v0.0.22. Truncating to X.Y.Z above would title those builds exactly
+        # like the release they are ahead of, which matters because the docs
+        # built from the default branch are almost always in this state. Mark
+        # them instead. '+' reads as "past 0.0.22"; PEP 440's '.dev' would be
+        # backwards, denoting a pre-release of a version rather than a
+        # successor to it.
+        version += '+'
+
 # Sphinx would default this to '<project> <release> documentation', which spells
 # out the whole versioneer string, commit hash and all. The short X.Y.Z reads
 # better, and an empty version collapses instead of leaving a gap.
