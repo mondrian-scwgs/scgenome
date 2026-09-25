@@ -178,7 +178,8 @@ g = scgenome.pl.plot_cell_ascn_matrix_fig(
 ```
 
 
-Everything `plot_cell_cn_matrix_fig` accepts works here too, including cell
+All three heatmap functions share the same arguments beyond the palette, so
+everything `plot_cell_matrix_fig` accepts works here too, including cell
 ordering, a phylogeny, and annotation bars.
 
 

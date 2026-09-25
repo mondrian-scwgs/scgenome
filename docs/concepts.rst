@@ -98,7 +98,7 @@ annotated::
     adata = scgenome.tl.compute_umap(adata, layer_name='copy')
 
     # Plotting: consume annotations
-    scgenome.pl.plot_cell_cn_matrix_fig(
+    scgenome.pl.plot_cell_tcn_matrix_fig(
         adata,
         layer_name='state',
         cell_order_fields=['cluster_id', 'cell_order'],

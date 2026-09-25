@@ -5,6 +5,7 @@ import seaborn as sns
 import pandas as pd
 import Bio.Phylo
 import collections.abc
+import warnings
 
 from anndata import AnnData
 
@@ -17,9 +18,9 @@ import scgenome.refgenome
 from . import cn_colors
 
 
-def plot_cell_cn_matrix(
+def plot_cell_matrix(
         adata: AnnData,
-        layer_name='state',
+        layer_name=None,
         cell_order_fields=(),
         ax=None,
         vmin=None,
@@ -28,16 +29,20 @@ def plot_cell_cn_matrix(
         palette=None,
         show_cell_ids=False,
         style='black',
-        rasterized=False,
-        raw=None):
-    """ Plot a copy number matrix
+        rasterized=False):
+    """ Plot a matrix of per cell values across the genome
+
+    Makes no assumption about what the values mean. Values are colored with a
+    continuous colormap unless a discrete `palette` is given. For total copy
+    number or allele specific states, prefer `plot_cell_tcn_matrix` or
+    `plot_cell_ascn_matrix`, which select the matching palette for you.
 
     Parameters
     ----------
     adata : AnnData
-        copy number data
+        per cell data with var describing genomic bins
     layer_name : str, optional
-        layer with copy number data to plot, None for X, by default 'state'
+        layer with values to plot, None for X, by default None
     cell_order_fields : list, optional
         columns of obs on which to sort cells, by default None
     ax : matplotlib.axes.Axes, optional
@@ -46,13 +51,14 @@ def plot_cell_cn_matrix(
         vmin and vmax define the data range that the colormap covers, see `matplotlib.pyplot.imshow`.
         Applies to `cmap` only, discrete palettes map values to colors directly.
     cmap : str or matplotlib.colors.Colormap, optional
-        continuous colormap to use, mutually exclusive with palette
+        continuous colormap to use, by default 'viridis'. Mutually exclusive
+        with palette.
     palette : str or dict, optional
         discrete palette to use, 'cn' for total copy number states,
         'allele_state' for allele specific states, or a dict mapping value to
-        color, by default 'cn'. Mutually exclusive with cmap. Unlike cmap, a
-        palette maps values to colors directly, so colors do not depend on the
-        range of values present.
+        color. Mutually exclusive with cmap. Unlike cmap, a palette maps values
+        to colors directly, so colors do not depend on the range of values
+        present.
     show_cell_ids : bool, optional
         show cell ids on heatmap axis, by default False
     style : str, optional
@@ -60,8 +66,6 @@ def plot_cell_cn_matrix(
         by default 'black'
     rasterized : bool, optional
         rasterize the plot, by default False
-    raw : bool, optional
-        deprecated, use cmap instead
 
     Returns
     -------
@@ -76,15 +80,9 @@ def plot_cell_cn_matrix(
 
         import scgenome
         adata = scgenome.datasets.OV2295_HMMCopy_reduced()
-        scgenome.pl.plot_cell_cn_matrix(adata)
+        scgenome.pl.plot_cell_matrix(adata, layer_name='copy', vmin=0, vmax=4)
 
     """
-
-    if raw is not None:
-        import warnings
-        warnings.warn('raw is deprecated, pass cmap to use a continuous colormap', DeprecationWarning, stacklevel=2)
-        if raw and cmap is None and palette is None:
-            cmap = 'viridis'
 
     if cmap is not None and palette is not None:
         raise ValueError('cannot provide both cmap and palette')
@@ -117,15 +115,17 @@ def plot_cell_cn_matrix(
     else:
         X = adata.X.copy()
 
-    if cmap is None:
+    if palette is not None:
         # Discrete palettes map values to colors directly, bypassing any norm,
         # so the same value gets the same color regardless of what else is in X
-        palette_info = cn_colors.resolve_palette(palette if palette is not None else 'cn')
+        palette_info = cn_colors.resolve_palette(palette)
         X_colors = palette_info['mapper'](X)
         im = ax.imshow(X_colors, aspect='auto', interpolation='none', rasterized=rasterized)
 
     else:
         palette_info = None
+        if cmap is None:
+            cmap = 'viridis'
         if isinstance(cmap, str):
             cmap = matplotlib.colormaps[cmap]
         im = ax.imshow(X, aspect='auto', cmap=cmap, interpolation='none', vmin=vmin, vmax=vmax, rasterized=rasterized)
@@ -315,9 +315,9 @@ def _plot_continuous_annotation(values, ax, ax_legend, title, horizontal=False, 
     return annotation_info
 
 
-def plot_cell_cn_matrix_fig(
+def plot_cell_matrix_fig(
         adata: AnnData,
-        layer_name='state',
+        layer_name=None,
         tree=None,
         cell_order_fields=None,
         annotation_fields=None,
@@ -331,16 +331,20 @@ def plot_cell_cn_matrix_fig(
         palette=None,
         show_cell_ids=False,
         show_subsets=False,
-        style='black',
-        raw=None):
-    """ Plot a copy number matrix
+        style='black'):
+    """ Plot a matrix of per cell values with annotations and a legend
+
+    Makes no assumption about what the values mean. Values are colored with a
+    continuous colormap unless a discrete `palette` is given. For total copy
+    number or allele specific states, prefer `plot_cell_tcn_matrix_fig` or
+    `plot_cell_ascn_matrix_fig`, which select the matching palette for you.
 
     Parameters
     ----------
     adata : AnnData
-        copy number data
+        per cell data with var describing genomic bins
     layer_name : str, optional
-        layer with copy number data to plot, None for X, by default 'state'
+        layer with values to plot, None for X, by default None
     tree : Bio.Phylo.BaseTree.Tree, optional
         phylogenetic tree
     cell_order_fields : list, optional
@@ -353,11 +357,17 @@ def plot_cell_cn_matrix_fig(
         vmin and vmax define the data range that the colormap covers, see `matplotlib.pyplot.imshow`.
         Applies to `cmap` only, discrete palettes map values to colors directly.
     cmap : str or matplotlib.colors.Colormap, optional
-        continuous colormap to use, mutually exclusive with palette
+        continuous colormap to use, by default 'viridis'. Mutually exclusive
+        with palette.
     palette : str or dict, optional
         discrete palette to use, 'cn' for total copy number states,
         'allele_state' for allele specific states, or a dict mapping value to
-        color, by default 'cn'. Mutually exclusive with cmap.
+        color. Mutually exclusive with cmap.
+    annotation_cmap, var_annotation_cmap : dict, optional
+        colors for each annotation field, keyed by field name. The dtype of
+        the column decides how each entry is read: numeric columns take a
+        continuous colormap name, categorical columns take either a colormap
+        name or a dict mapping level to color.
     show_cell_ids : bool, optional
         show cell ids on heatmap axis, by default False
     show_subsets : bool, optional
@@ -380,8 +390,9 @@ def plot_cell_cn_matrix_fig(
         import scgenome
         adata = scgenome.datasets.OV2295_HMMCopy_reduced()
 
-        g = scgenome.pl.plot_cell_cn_matrix_fig(
+        g = scgenome.pl.plot_cell_matrix_fig(
             adata,
+            layer_name='copy', vmin=0, vmax=4,
             cell_order_fields=['cell_order'],
             annotation_fields=['cluster_id', 'sample_id', 'quality'])
 
@@ -492,10 +503,10 @@ def plot_cell_cn_matrix_fig(
 
     heatmap_ax = axes[heatmap_ax_row_idx, heatmap_ax_col_idx]
     ax_legend = axes_legends[0]
-    g = plot_cell_cn_matrix(
+    g = plot_cell_matrix(
         adata, layer_name=layer_name,
         cell_order_fields=cell_order_fields,
-        ax=heatmap_ax, vmin=vmin, vmax=vmax, cmap=cmap, palette=palette, raw=raw,
+        ax=heatmap_ax, vmin=vmin, vmax=vmax, cmap=cmap, palette=palette,
         show_cell_ids=show_cell_ids,
         style=style)
 
@@ -503,15 +514,17 @@ def plot_cell_cn_matrix_fig(
     im = g['im']
     palette_info = g['palette_info']
 
+    value_title = layer_name if layer_name is not None else 'value'
+
     # A discrete palette gets a patch legend of its levels, a continuous
     # colormap gets a colorbar
     if palette_info is not None:
-        title = palette_info['title'] if palette_info['title'] is not None else layer_name
+        title = palette_info['title'] if palette_info['title'] is not None else value_title
         legend_info = {'ax_legend': ax_legend}
         legend_info['legend'] = palette_info['legend'](ax_legend, title)
 
     else:
-        legend_info = _plot_continuous_legend(ax_legend, im, layer_name)
+        legend_info = _plot_continuous_legend(ax_legend, im, value_title)
 
     if show_subsets:
         # Need to copy the adata to avoid modifying a view
@@ -559,6 +572,104 @@ def plot_cell_cn_matrix_fig(
     }
 
 
+def _warn_if_not_integer(adata, layer_name):
+    """ Warn if a layer holds continuous values
+
+    The total copy number palette maps values to colors by equality against
+    integer states, so a continuous layer misses every state and renders
+    almost entirely white.
+    """
+    X = adata.layers[layer_name] if layer_name is not None else adata.X
+    X = np.asarray(X, dtype=float)
+
+    finite = X[np.isfinite(X)]
+    if finite.size == 0 or np.array_equal(finite, np.round(finite)):
+        return
+
+    name = layer_name if layer_name is not None else 'X'
+    warnings.warn(
+        f'{name} holds non integer values, which the total copy number palette '
+        f'maps by equality and will render almost entirely white. Use '
+        f'plot_cell_matrix for continuous values.',
+        UserWarning, stacklevel=3)
+
+
+def plot_cell_tcn_matrix(adata: AnnData, layer_name='state', **kwargs):
+    """ Plot a total copy number matrix
+
+    Colors integer copy number states with the total copy number palette.
+
+    Parameters
+    ----------
+    adata : AnnData
+        copy number data with integer states in `layer_name`
+    layer_name : str, optional
+        layer with copy number states to plot, None for X, by default 'state'
+    **kwargs : dict
+        additional arguments passed to `plot_cell_matrix`
+
+    Returns
+    -------
+    dict
+        Dictionary of plot and data elements
+
+    Examples
+    -------
+
+    .. plot::
+        :context: close-figs
+
+        import scgenome
+        adata = scgenome.datasets.OV2295_HMMCopy_reduced()
+        scgenome.pl.plot_cell_tcn_matrix(adata)
+
+    """
+    _warn_if_not_integer(adata, layer_name)
+
+    return plot_cell_matrix(
+        adata, layer_name=layer_name, palette='cn', **kwargs)
+
+
+def plot_cell_tcn_matrix_fig(adata: AnnData, layer_name='state', **kwargs):
+    """ Plot a total copy number matrix with annotations and a legend
+
+    Colors integer copy number states with the total copy number palette.
+
+    Parameters
+    ----------
+    adata : AnnData
+        copy number data with integer states in `layer_name`
+    layer_name : str, optional
+        layer with copy number states to plot, None for X, by default 'state'
+    **kwargs : dict
+        additional arguments passed to `plot_cell_matrix_fig`
+
+    Returns
+    -------
+    dict
+        Dictionary of plot and data elements
+
+    Examples
+    -------
+
+    .. plot::
+        :context: close-figs
+
+        import scgenome
+        adata = scgenome.datasets.OV2295_HMMCopy_reduced()
+
+        g = scgenome.pl.plot_cell_tcn_matrix_fig(
+            adata,
+            cell_order_fields=['cell_order'],
+            annotation_fields=['cluster_id', 'sample_id', 'quality'])
+
+    """
+    _warn_if_not_integer(adata, layer_name)
+
+    return plot_cell_matrix_fig(
+        adata, layer_name=layer_name, palette='cn', **kwargs)
+
+
 def _with_allele_state_layer(adata):
     """ Add the allele state layer if absent, without modifying the input
     """
@@ -585,7 +696,7 @@ def plot_cell_ascn_matrix(adata: AnnData, **kwargs):
     adata : AnnData
         copy number data with layers['A'] and layers['B']
     **kwargs : dict
-        additional arguments passed to `plot_cell_cn_matrix`
+        additional arguments passed to `plot_cell_matrix`
 
     Returns
     -------
@@ -604,7 +715,7 @@ def plot_cell_ascn_matrix(adata: AnnData, **kwargs):
         scgenome.pl.plot_cell_ascn_matrix(adata, cell_order_fields=['cell_order'])
 
     """
-    return plot_cell_cn_matrix(
+    return plot_cell_matrix(
         _with_allele_state_layer(adata),
         layer_name='allele_state', palette='allele_state', **kwargs)
 
@@ -624,7 +735,7 @@ def plot_cell_ascn_matrix_fig(adata: AnnData, **kwargs):
     adata : AnnData
         copy number data with layers['A'] and layers['B']
     **kwargs : dict
-        additional arguments passed to `plot_cell_cn_matrix_fig`
+        additional arguments passed to `plot_cell_matrix_fig`
 
     Returns
     -------
@@ -647,6 +758,60 @@ def plot_cell_ascn_matrix_fig(adata: AnnData, **kwargs):
             annotation_fields=['cluster_id', 'n_wgd'])
 
     """
-    return plot_cell_cn_matrix_fig(
+    return plot_cell_matrix_fig(
         _with_allele_state_layer(adata),
         layer_name='allele_state', palette='allele_state', **kwargs)
+
+
+def _deprecated_cn_matrix_args(layer_name, cmap, palette, raw):
+    """ Translate the pre-palette arguments of plot_cell_cn_matrix
+
+    Reproduces the old behaviour exactly: the total copy number palette by
+    default, a continuous colormap when one was given or when raw was set.
+    """
+    if raw is not None:
+        warnings.warn(
+            'raw is deprecated, use plot_cell_matrix with a cmap for continuous values',
+            DeprecationWarning, stacklevel=3)
+
+    if cmap is None and palette is None:
+        if raw:
+            cmap = 'viridis'
+        else:
+            palette = 'cn'
+
+    return dict(layer_name=layer_name, cmap=cmap, palette=palette)
+
+
+def plot_cell_cn_matrix(adata: AnnData, layer_name='state', cmap=None, palette=None, raw=None, **kwargs):
+    """ Plot a copy number matrix
+
+    .. deprecated::
+        Use `plot_cell_tcn_matrix` for total copy number states,
+        `plot_cell_ascn_matrix` for allele specific states, or
+        `plot_cell_matrix` for any other values.
+    """
+    warnings.warn(
+        'plot_cell_cn_matrix is deprecated, use plot_cell_tcn_matrix for total copy '
+        'number states or plot_cell_matrix for other values',
+        DeprecationWarning, stacklevel=2)
+
+    return plot_cell_matrix(
+        adata, **_deprecated_cn_matrix_args(layer_name, cmap, palette, raw), **kwargs)
+
+
+def plot_cell_cn_matrix_fig(adata: AnnData, layer_name='state', cmap=None, palette=None, raw=None, **kwargs):
+    """ Plot a copy number matrix with annotations and a legend
+
+    .. deprecated::
+        Use `plot_cell_tcn_matrix_fig` for total copy number states,
+        `plot_cell_ascn_matrix_fig` for allele specific states, or
+        `plot_cell_matrix_fig` for any other values.
+    """
+    warnings.warn(
+        'plot_cell_cn_matrix_fig is deprecated, use plot_cell_tcn_matrix_fig for total '
+        'copy number states or plot_cell_matrix_fig for other values',
+        DeprecationWarning, stacklevel=2)
+
+    return plot_cell_matrix_fig(
+        adata, **_deprecated_cn_matrix_args(layer_name, cmap, palette, raw), **kwargs)

@@ -9,6 +9,7 @@ import matplotlib
 import numpy as np
 import pandas as pd
 import pytest
+import warnings
 
 matplotlib.use('Agg')
 
@@ -120,8 +121,80 @@ def test_cmap_and_palette_are_mutually_exclusive(allele_adata):
     adata = cn_colors.add_allele_state_layer(allele_adata)
 
     with pytest.raises(ValueError, match='cannot provide both'):
-        scgenome.pl.plot_cell_cn_matrix(
+        scgenome.pl.plot_cell_matrix(
             adata, layer_name='allele_state', cmap='viridis', palette='cn')
+
+    plt.close('all')
+
+
+def test_plot_cell_matrix_defaults_to_continuous(allele_adata):
+    """ The generic matrix makes no assumption about what the values mean
+    """
+    g = scgenome.pl.plot_cell_matrix(allele_adata, layer_name='A')
+
+    assert g['palette_info'] is None
+    assert g['im'].cmap.name == 'viridis'
+
+    plt.close('all')
+
+
+def test_plot_cell_tcn_matrix_uses_the_cn_palette(allele_adata):
+    allele_adata.layers['state'] = np.ones(allele_adata.shape)
+
+    g = scgenome.pl.plot_cell_tcn_matrix(allele_adata)
+
+    colors = g['im'].get_array()
+    np.testing.assert_array_equal(
+        colors[0, 0], cn_colors.hex_to_rgb(cn_colors.color_reference[1]))
+
+    plt.close('all')
+
+
+def test_plot_cell_tcn_matrix_warns_on_continuous_layer(allele_adata):
+    """ The cn palette matches by equality, so continuous values render white
+    """
+    allele_adata.layers['copy'] = np.full(allele_adata.shape, 2.34)
+
+    with pytest.warns(UserWarning, match='non integer values'):
+        scgenome.pl.plot_cell_tcn_matrix(allele_adata, layer_name='copy')
+
+    plt.close('all')
+
+
+def test_plot_cell_tcn_matrix_quiet_on_integer_layer(allele_adata):
+    allele_adata.layers['state'] = np.ones(allele_adata.shape)
+
+    with warnings.catch_warnings():
+        warnings.simplefilter('error', UserWarning)
+        scgenome.pl.plot_cell_tcn_matrix(allele_adata)
+
+    plt.close('all')
+
+
+def test_deprecated_cn_matrix_matches_tcn_matrix(allele_adata):
+    """ The alias must reproduce the old default behaviour exactly
+    """
+    allele_adata.layers['state'] = np.ones(allele_adata.shape)
+
+    with pytest.warns(DeprecationWarning, match='plot_cell_cn_matrix is deprecated'):
+        deprecated = scgenome.pl.plot_cell_cn_matrix(allele_adata)
+
+    expected = scgenome.pl.plot_cell_tcn_matrix(allele_adata)
+
+    np.testing.assert_array_equal(
+        deprecated['im'].get_array(), expected['im'].get_array())
+
+    plt.close('all')
+
+
+def test_deprecated_raw_selects_a_continuous_colormap(allele_adata):
+    """ raw=True meant 'this layer is continuous', which is now cmap
+    """
+    with pytest.warns(DeprecationWarning, match='raw is deprecated'):
+        g = scgenome.pl.plot_cell_cn_matrix(allele_adata, layer_name='A', raw=True)
+
+    assert g['palette_info'] is None
+    assert g['im'].cmap.name == 'viridis'
 
     plt.close('all')
 

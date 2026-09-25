@@ -65,9 +65,28 @@ adata = scgenome.tl.compute_umap(adata, layer_name='copy')
 # Result: adata.obs['UMAP1'], adata.obs['UMAP2']
 
 # Plot
-scgenome.pl.plot_cell_cn_matrix(adata, layer_name='state', cell_order_fields=['cell_order'])
+scgenome.pl.plot_cell_tcn_matrix(adata, layer_name='state', cell_order_fields=['cell_order'])
 scgenome.pl.plot_cn_profile(adata, cell_id, value_layer_name='copy', state_layer_name='state')
 ```
+
+## Heatmaps
+
+Three functions, chosen by what the values mean rather than by an argument.
+Each has a `_fig` variant adding annotation bars and a legend.
+
+| Function | For | Colors |
+|----------|-----|--------|
+| `pl.plot_cell_tcn_matrix` | Integer total CN states (`layer_name='state'`) | CN palette |
+| `pl.plot_cell_ascn_matrix` | Allele specific states, derived from layers `A`/`B` | Allele state palette |
+| `pl.plot_cell_matrix` | Anything else, including continuous layers like `copy` | Continuous `cmap` |
+
+Palettes map values to colors by equality, so colors never depend on which
+values happen to be present. Never use the CN palette on a continuous layer —
+it matches by equality and renders almost everything white;
+`plot_cell_tcn_matrix` warns if you try.
+
+`pl.plot_cell_cn_matrix`/`_fig` and the `raw=` argument are deprecated aliases
+kept for compatibility; use the table above instead.
 
 ## Function Conventions
 
