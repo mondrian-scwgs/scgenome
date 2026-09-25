@@ -5,6 +5,14 @@ build:
   os: ubuntu-22.04
   tools:
     python: "3.9"
+  jobs:
+    post_checkout:
+      # Read the Docs checks out shallow and without tags, which leaves
+      # versioneer unable to reach v0.0.21 and reporting '0+untagged.N.gHASH'.
+      # docs/conf.py derives the version from the package, so without this the
+      # rendered docs carry no version at all. --unshallow is an error on an
+      # already-complete repository, hence the fallback.
+      - git fetch origin --tags --unshallow || git fetch origin --tags
 
 sphinx:
   configuration: docs/conf.py

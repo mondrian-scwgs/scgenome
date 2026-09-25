@@ -34,10 +34,15 @@ author = 'Andrew McPherson'
 release = scgenome.__version__
 
 if release.startswith('0+'):
-    # versioneer reports '0+unknown' when there is no git metadata and no
-    # baked-in _version.py, e.g. a bare source export. Say so rather than
-    # rendering a misleading '0.0.0'.
-    release = version = 'unknown'
+    # versioneer reports '0+unknown' with no git metadata at all, and
+    # '0+untagged.N.gHASH' when there is a repository but no tag is reachable —
+    # which is what a checkout whose tags were never fetched looks like. Neither
+    # is a version, so leave both empty and let the title below drop the field
+    # rather than rendering a misleading '0.0.0' or the literal word 'unknown'.
+    #
+    # If this fires on Read the Docs, the tags are missing from the checkout;
+    # see the post_checkout job in .readthedocs.yaml.
+    release = version = ''
 
 else:
     _parsed = parse_version(release)
@@ -45,6 +50,11 @@ else:
 
     if _parsed.is_devrelease:
         version += '.dev'
+
+# Sphinx would default this to '<project> <release> documentation', which spells
+# out the whole versioneer string, commit hash and all. The short X.Y.Z reads
+# better, and an empty version collapses instead of leaving a gap.
+html_title = ' '.join(filter(None, [project, version, 'documentation']))
 
 # default settings
 templates_path = ['_templates']
