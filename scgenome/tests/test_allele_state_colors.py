@@ -136,16 +136,24 @@ def test_plot_cell_ascn_matrix_does_not_modify_input(allele_adata):
     plt.close('all')
 
 
-def test_plot_cell_ascn_matrix_applies_allele_cn_mask(allele_adata):
-    """ Bins without allele specific copy number are dropped when marked
+def test_plot_cell_ascn_matrix_plots_all_bins(allele_adata):
+    """ Bins are not filtered, callers subset adata themselves
     """
-    allele_adata.var['has_allele_cn'] = [True] * 5 + [False]
-
     g = scgenome.pl.plot_cell_ascn_matrix(allele_adata)
-    assert g['adata'].shape[1] == 5
+    assert g['adata'].shape == (4, 6)
 
-    g = scgenome.pl.plot_cell_ascn_matrix(allele_adata, use_allele_cn_mask=False)
-    assert g['adata'].shape[1] == 6
+    plt.close('all')
+
+
+def test_plot_cell_ascn_matrix_reuses_existing_layer(allele_adata):
+    """ An allele_state layer already on the adata is plotted as given
+    """
+    adata = cn_colors.add_allele_state_layer(allele_adata.copy())
+    adata.layers['allele_state'][:] = 2.
+
+    g = scgenome.pl.plot_cell_ascn_matrix(adata)
+
+    np.testing.assert_array_equal(g['adata'].layers['allele_state'], 2.)
 
     plt.close('all')
 

@@ -559,41 +559,31 @@ def plot_cell_cn_matrix_fig(
     }
 
 
-def _prepare_ascn_adata(adata, use_allele_cn_mask=True):
-    """ Subset to bins with allele specific copy number and add the state layer
-
-    Does not modify the input adata.
+def _with_allele_state_layer(adata):
+    """ Add the allele state layer if absent, without modifying the input
     """
-    if use_allele_cn_mask and 'has_allele_cn' in adata.var:
-        adata = adata[:, adata.var['has_allele_cn'].values.astype(bool)]
+    if 'allele_state' in adata.layers:
+        return adata
 
-    if 'allele_state' not in adata.layers:
-        # Copy so that adding the layer does not modify the caller's adata, and
-        # so that we are not adding a layer to a view
-        adata = adata.copy()
-        adata = cn_colors.add_allele_state_layer(adata)
-
-    return adata
+    # Copy so that adding the layer does not modify the caller's adata, and so
+    # that we are not adding a layer to a view
+    return cn_colors.add_allele_state_layer(adata.copy())
 
 
-def plot_cell_ascn_matrix(
-        adata: AnnData,
-        use_allele_cn_mask=True,
-        **kwargs):
+def plot_cell_ascn_matrix(adata: AnnData, **kwargs):
     """ Plot an allele specific copy number matrix
 
     Plots the allele specific state of each bin in each cell, colored by the
-    allele state palette. Adds `layers['allele_state']` if not already present,
-    and restricts to bins with allele specific copy number if `var` has a
-    `has_allele_cn` column.
+    allele state palette. Adds `layers['allele_state']` if not already present.
+
+    Bins with no allele specific copy number are left white. Subset `adata`
+    before plotting to drop them, for instance on a `has_allele_cn` column of
+    `var` if the allele specific caller provided one.
 
     Parameters
     ----------
     adata : AnnData
         copy number data with layers['A'] and layers['B']
-    use_allele_cn_mask : bool, optional
-        restrict to bins where var['has_allele_cn'], if that column exists,
-        by default True
     **kwargs : dict
         additional arguments passed to `plot_cell_cn_matrix`
 
@@ -610,33 +600,29 @@ def plot_cell_ascn_matrix(
 
         import scgenome
         adata = scgenome.datasets.OV081_Signals_reduced()
+        adata = adata[:, adata.var['has_allele_cn']]
         scgenome.pl.plot_cell_ascn_matrix(adata, cell_order_fields=['cell_order'])
 
     """
-    adata = _prepare_ascn_adata(adata, use_allele_cn_mask=use_allele_cn_mask)
-
     return plot_cell_cn_matrix(
-        adata, layer_name='allele_state', palette='allele_state', **kwargs)
+        _with_allele_state_layer(adata),
+        layer_name='allele_state', palette='allele_state', **kwargs)
 
 
-def plot_cell_ascn_matrix_fig(
-        adata: AnnData,
-        use_allele_cn_mask=True,
-        **kwargs):
+def plot_cell_ascn_matrix_fig(adata: AnnData, **kwargs):
     """ Plot an allele specific copy number matrix with annotations and legend
 
     Plots the allele specific state of each bin in each cell, colored by the
-    allele state palette. Adds `layers['allele_state']` if not already present,
-    and restricts to bins with allele specific copy number if `var` has a
-    `has_allele_cn` column.
+    allele state palette. Adds `layers['allele_state']` if not already present.
+
+    Bins with no allele specific copy number are left white. Subset `adata`
+    before plotting to drop them, for instance on a `has_allele_cn` column of
+    `var` if the allele specific caller provided one.
 
     Parameters
     ----------
     adata : AnnData
         copy number data with layers['A'] and layers['B']
-    use_allele_cn_mask : bool, optional
-        restrict to bins where var['has_allele_cn'], if that column exists,
-        by default True
     **kwargs : dict
         additional arguments passed to `plot_cell_cn_matrix_fig`
 
@@ -653,6 +639,7 @@ def plot_cell_ascn_matrix_fig(
 
         import scgenome
         adata = scgenome.datasets.OV081_Signals_reduced()
+        adata = adata[:, adata.var['has_allele_cn']]
 
         g = scgenome.pl.plot_cell_ascn_matrix_fig(
             adata,
@@ -660,7 +647,6 @@ def plot_cell_ascn_matrix_fig(
             annotation_fields=['cluster_id', 'n_wgd'])
 
     """
-    adata = _prepare_ascn_adata(adata, use_allele_cn_mask=use_allele_cn_mask)
-
     return plot_cell_cn_matrix_fig(
-        adata, layer_name='allele_state', palette='allele_state', **kwargs)
+        _with_allele_state_layer(adata),
+        layer_name='allele_state', palette='allele_state', **kwargs)
