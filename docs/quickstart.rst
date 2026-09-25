@@ -132,7 +132,7 @@ conventions; UMAP coordinates land in ``obs`` as plain columns.
 Plot a copy number heatmap
 --------------------------
 
-:func:`~scgenome.pl.plot_cell_cn_matrix` draws the copy-number matrix into a
+:func:`~scgenome.pl.plot_cell_tcn_matrix` draws the copy-number matrix into a
 single axis. ``cell_order_fields`` takes a list of ``obs`` columns to sort rows
 by, applied left to right, so the call below groups cells by cluster and then
 orders within each cluster by hierarchical similarity.
@@ -140,13 +140,13 @@ orders within each cluster by hierarchical similarity.
 .. plot::
     :context: close-figs
 
-    scgenome.pl.plot_cell_cn_matrix(
+    scgenome.pl.plot_cell_tcn_matrix(
         adata,
         layer_name='state',
         cell_order_fields=['cluster_id', 'cell_order'],
     )
 
-:func:`~scgenome.pl.plot_cell_cn_matrix_fig` builds a full figure instead:
+:func:`~scgenome.pl.plot_cell_tcn_matrix_fig` builds a full figure instead:
 heatmap, a legend, and annotation bars for any ``obs`` columns you name.
 Categorical and continuous columns are detected automatically and get
 appropriate colour scales.
@@ -154,7 +154,7 @@ appropriate colour scales.
 .. plot::
     :context: close-figs
 
-    g = scgenome.pl.plot_cell_cn_matrix_fig(
+    g = scgenome.pl.plot_cell_tcn_matrix_fig(
         adata,
         layer_name='state',
         cell_order_fields=['cluster_id', 'cell_order'],

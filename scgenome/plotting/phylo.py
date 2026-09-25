@@ -1,5 +1,6 @@
 import Bio.Phylo
 import numpy as np
+import warnings
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from matplotlib import gridspec
@@ -31,8 +32,10 @@ def plot_tree_cn(
         obs_cmap=None,
         var_label=None,
         fig=None,
-        raw=False,
-        max_cn=13):
+        cmap=None,
+        palette=None,
+        raw=None,
+        max_cn=None):
     """ Plot a tree aligned to a CN values matrix heatmap
 
     Parameters
@@ -86,13 +89,27 @@ def plot_tree_cn(
     ax = fig.add_subplot(gs[0, 1])
 
     if chrom_segments:
-        scgenome.plotting.heatmap.plot_cell_cn_matrix(
+        if raw is not None:
+            warnings.warn(
+                'raw is deprecated, pass cmap for a continuous colormap or '
+                "palette='cn' for total copy number states",
+                DeprecationWarning, stacklevel=2)
+
+        if max_cn is not None:
+            warnings.warn(
+                'max_cn has no effect and will be removed',
+                DeprecationWarning, stacklevel=2)
+
+        if cmap is None and palette is None and raw is False:
+            palette = 'cn'
+
+        scgenome.plotting.heatmap.plot_cell_matrix(
             adata,
             layer_name=layer_name,
             cell_order_fields=('phylo_order',),
             ax=ax,
-            raw=raw,
-            max_cn=max_cn,
+            cmap=cmap,
+            palette=palette,
         )
 
     else:

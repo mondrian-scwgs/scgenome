@@ -135,8 +135,12 @@ Copy number heatmaps
 .. autosummary::
    :toctree: generated/
 
-   pl.plot_cell_cn_matrix
-   pl.plot_cell_cn_matrix_fig
+   pl.plot_cell_tcn_matrix
+   pl.plot_cell_tcn_matrix_fig
+   pl.plot_cell_ascn_matrix
+   pl.plot_cell_ascn_matrix_fig
+   pl.plot_cell_matrix
+   pl.plot_cell_matrix_fig
    pl.plot_cn_rect
 
 Copy number profiles
@@ -183,6 +187,7 @@ Colors and legends
    :toctree: generated/
 
    pl.cn_legend
+   pl.allele_state_legend
    pl.add_allele_state_layer
 
 Genomic regions

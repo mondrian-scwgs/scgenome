@@ -69,7 +69,7 @@ adata = scgenome.tl.compute_umap(adata, layer_name='copy')
 # Result: adata.obs['UMAP1'], adata.obs['UMAP2']
 
 # Plot
-scgenome.pl.plot_cell_cn_matrix(adata, layer_name='state', cell_order_fields=['cell_order'])
+scgenome.pl.plot_cell_tcn_matrix(adata, layer_name='state', cell_order_fields=['cell_order'])
 scgenome.pl.plot_cn_profile(adata, cell_id, value_layer_name='copy', state_layer_name='state')
 ```
 

@@ -130,6 +130,84 @@ panel are copy neutral LOH: the cell has the usual number of copies, but they
 all descend from one parent.
 
 
+## Allele Specific Heatmap
+
+A profile shows one cell in detail. To see whether an event is shared across
+the population or private to a few cells, plot every cell at once.
+`scgenome.pl.plot_cell_ascn_matrix_fig` draws one row per cell, with each bin
+coloured by the same five allele specific states used in the profiles above.
+
+
+```python
+
+fig = plt.figure(figsize=(6, 8), dpi=150)
+
+g = scgenome.pl.plot_cell_ascn_matrix_fig(
+    adata,
+    cell_order_fields=['cell_order'],
+    fig=fig)
+
+```
+
+
+The function derives the allele state from the `A` and `B` layers itself, so
+there is no preparation step, and it leaves the input `adata` untouched.
+
+Allele specific callers leave a fraction of bins without a call, and there is
+no state that honestly represents those. They are drawn white rather than
+being folded into one of the five states, where they would read as a confident
+result. The white stripes above are bins in that category.
+
+Filtering them out is left to you, since which bins are callable depends on
+the caller rather than on the plot. This dataset records the decision in a
+`has_allele_cn` column, so subsetting on it before plotting gives a heatmap of
+only the bins with a call.
+
+
+```python
+
+adata_called = adata[:, adata.var['has_allele_cn']]
+
+fig = plt.figure(figsize=(6, 8), dpi=150)
+
+g = scgenome.pl.plot_cell_ascn_matrix_fig(
+    adata_called,
+    cell_order_fields=['cell_order'],
+    fig=fig)
+
+```
+
+
+All three heatmap functions share the same arguments beyond the palette, so
+everything `plot_cell_matrix_fig` accepts works here too, including cell
+ordering, a phylogeny, and annotation bars.
+
+
+```python
+
+fig = plt.figure(figsize=(6, 8), dpi=150)
+
+g = scgenome.pl.plot_cell_ascn_matrix_fig(
+    adata_called,
+    cell_order_fields=['cluster_id', 'cell_order'],
+    annotation_fields=['cluster_id', 'n_wgd'],
+    fig=fig)
+
+```
+
+
+Ordering by `cluster_id` groups related cells together, and the annotation bars
+on the right make the cluster and whole genome doubling status of each row
+readable alongside it. Vertical bands of colour running through every cell are
+ancestral events; patches confined to one block of rows are specific to a
+subpopulation.
+
+The colours come from a discrete palette rather than a colormap, so a given
+state is always the same colour. Subsetting to a cluster or a chromosome will
+not change what any colour means, which is what makes two of these plots safe
+to compare side by side.
+
+
 ## Pseudobulk Profiles
 
 Single cell profiles are noisy, especially in BAF, because each bin is

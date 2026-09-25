@@ -67,7 +67,7 @@ def sort_cells(
     Combine with a cluster assignment to group cells first and order within
     each group second::
 
-        scgenome.pl.plot_cell_cn_matrix(
+        scgenome.pl.plot_cell_tcn_matrix(
             adata, cell_order_fields=['cluster_id', 'cell_order'])
 
     """

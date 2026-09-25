@@ -30,7 +30,7 @@ adata = scgenome.tl.cluster_cells(adata, layer_name='copy', max_k=5)
 adata = scgenome.tl.sort_cells(adata, layer_name='copy')
 
 # Plot a copy number heatmap with cluster and quality annotations
-scgenome.pl.plot_cell_cn_matrix_fig(
+scgenome.pl.plot_cell_tcn_matrix_fig(
     adata,
     layer_name='state',
     cell_order_fields=['cluster_id', 'cell_order'],
