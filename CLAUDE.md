@@ -88,6 +88,42 @@ it matches by equality and renders almost everything white;
 `pl.plot_cell_cn_matrix`/`_fig` and the `raw=` argument are deprecated aliases
 kept for compatibility; use the table above instead.
 
+## Composing panels
+
+`pl.CellGrid` lays out several panels against one shared row order. It owns
+only two things: allocating axes and collecting legends. Everything drawn comes
+from `pl.panels.*`, each of which takes an `ax` and draws one thing.
+
+```python
+g = (scgenome.pl.CellGrid(adata, cell_order_fields=['cell_order'], figsize=(14, 5))
+     .add_dendrogram()
+     .add_heatmap('state', palette='cn', name='Total CN')
+     .add_heatmap('copy', cmap='viridis', vmin=0, vmax=4, name='Copy')
+     .add_obs_annotation(['cluster_id', 'sample_id'])
+     .add_var_annotation('gc')
+     .plot())
+
+g.fig, g.axes['Total CN'], g.panels['Copy'], g.legends, g.cell_order
+```
+
+- The row order is resolved once and handed to every panel, so a tree, a
+  dendrogram and any number of heatmaps are guaranteed to agree.
+- Panel widths are declared and summed once, so adding an annotation bar cannot
+  resize the matrices beside it.
+- Panels *describe* their legend (`LegendSpec`) rather than drawing it, so
+  panels showing the same values collapse to one legend. `legend_title=`
+  overrides a heatmap's, `name=` only addresses the panel.
+- `add_heatmap(adata=other)` draws a different AnnData against the same order,
+  blanking rows for cells it does not have — that is how two samples are
+  compared side by side.
+
+`add_dendrogram()` reads the linkage `tl.sort_cells` stored. It refuses an order
+that would cross its brackets, by the same contiguity rule trees use.
+
+`plot_cell_*_matrix_fig` are presets over `CellGrid` and return what they always
+did, plus a `'grid'` key. `pl.plot_tree_cn` is deprecated in favour of
+`CellGrid` with `.add_tree()`.
+
 ## Ordering
 
 Row and column order is a value, not a side effect of plotting.
@@ -133,6 +169,7 @@ dendrogram behind an ordering can be drawn without reclustering.
 | `tl.resolve_cell_order` | obs[fields], tree | nothing, returns a `pd.Index` |
 | `tl.resolve_bin_order` | var['chr','start'] | nothing, returns a `pd.Index` |
 | `tl.align_tree_to_order` | tree | nothing, returns a rotated copy |
+| `tl.linkage_order_conflict` | linkage | nothing, returns the split merge or None |
 | `tl.detect_outliers` | layers[layer_name] | obs['is_outlier'], uns['outliers'] |
 | `tl.pca_loadings` | layers[layer] or X | obsm['X_pca'], varm['PCs'], uns['pca'] |
 | `tl.compute_umap` | layers[layer_name] | obs['UMAP1','UMAP2'] |

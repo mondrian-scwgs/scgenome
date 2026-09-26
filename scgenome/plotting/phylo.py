@@ -1,26 +1,30 @@
+import warnings
+
 import Bio.Phylo
 import numpy as np
-import warnings
 import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
-from matplotlib import gridspec
 import seaborn as sns
+from matplotlib import gridspec
 
-import scgenome.plotting.heatmap
+from .grid import CellGrid
+from .panels import map_categorical_colors
 
 
 def map_annotations_to_colors(annotation, cmap):
-    num_colors = len(np.unique(annotation))
+    """ Map annotation values to colors
 
-    color_map = {}
-    for idx, value in enumerate(np.unique(annotation)):
-        color_map[value] = cmap(float(idx) / float(max(1, num_colors - 1)))
+    .. deprecated::
+        Use `scgenome.pl.map_categorical_colors`, which returns the same
+        mapping keyed by level.
+    """
+    warnings.warn(
+        'map_annotations_to_colors is deprecated, use map_categorical_colors',
+        DeprecationWarning, stacklevel=2)
 
-    color_mat = []
-    for value in annotation:
-        color_mat.append(color_map[value])
-        
-    return color_mat, color_map
+    values = np.asarray(annotation)
+    level_colors, _ = map_categorical_colors(values, cmap=cmap)
+
+    return [level_colors[value] for value in values], level_colors
 
 
 def plot_tree_cn(
@@ -38,6 +42,16 @@ def plot_tree_cn(
         max_cn=None):
     """ Plot a tree aligned to a CN values matrix heatmap
 
+    .. deprecated::
+        Use :class:`~scgenome.pl.CellGrid`, which places a tree beside any
+        number of heatmaps against one shared row order::
+
+            g = (scgenome.pl.CellGrid(adata, tree=tree)
+                 .add_tree()
+                 .add_heatmap('state', palette='cn')
+                 .add_obs_annotation(['cluster_id'])
+                 .plot())
+
     Parameters
     ----------
     tree : Bio.Phylo.BaseTree.Tree
@@ -50,7 +64,7 @@ def plot_tree_cn(
         layer to plot for copy number heatmap, by default None
     obs_annotation : str, optional
         column of adata.obs to annotate cells, by default None
-    obs_cmap : matplotlib.colors.ListedColormap, optional
+    obs_cmap : matplotlib.colors.Colormap, optional
         color map for cell annotations, by default None
     var_label : str, optional
         column of adata.var to use for heatmap var labels, by default None use index
@@ -60,33 +74,19 @@ def plot_tree_cn(
         raw plotting, no integer color map, by default False
     max_cn : int, optional
         clip cn at max value, by default 13
-    """    
-    
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+        the figure drawn into
+    """
+    warnings.warn(
+        'plot_tree_cn is deprecated, use scgenome.pl.CellGrid with .add_tree() '
+        'and .add_heatmap()',
+        DeprecationWarning, stacklevel=2)
+
     if fig is None:
         fig = plt.figure(figsize=(16, 12), dpi=150)
-
-    # Add phylogenetic ordering to anndata obs
-    cell_ids = []
-    for a in tree.get_terminals():
-        cell_ids.append(a.name)
-
-    adata.obs['phylo_order'] = None
-    for idx, _ in adata.obs.iterrows():
-        adata.obs.loc[idx, 'phylo_order'] = cell_ids.index(idx)
-
-    gs = gridspec.GridSpec(1, 3, width_ratios=(0.4, 0.58, 0.02))
-
-    # Plot phylogenetic tree
-    ax = fig.add_subplot(gs[0, 0])
-    ax.spines['top'].set_visible(False)
-    ax.spines['right'].set_visible(False)
-    ax.spines['bottom'].set_visible(True)
-    ax.spines['left'].set_visible(False)
-    ax.get_yaxis().set_ticks([])
-    Bio.Phylo.draw(tree, label_func=lambda a: '', axes=ax, do_show=False)
-
-    # Plot copy number heatmap
-    ax = fig.add_subplot(gs[0, 1])
 
     if chrom_segments:
         if raw is not None:
@@ -103,51 +103,53 @@ def plot_tree_cn(
         if cmap is None and palette is None and raw is False:
             palette = 'cn'
 
-        scgenome.plotting.heatmap.plot_cell_matrix(
-            adata,
-            layer_name=layer_name,
-            cell_order_fields=('phylo_order',),
-            ax=ax,
-            cmap=cmap,
-            palette=palette,
-        )
+        grid = CellGrid(adata, tree=tree, fig=fig)
+        grid.add_tree(tree)
+        grid.add_heatmap(layer_name, name='heatmap', cmap=cmap, palette=palette)
 
-    else:
-        if layer_name is not None:
-            X = adata.layers[layer_name]
-        else:
-            X = adata.X
+        if obs_annotation is not None:
+            grid.add_obs_annotation(
+                obs_annotation, cmap={obs_annotation: obs_cmap} if obs_cmap else None)
 
-        # Order the cells according to the phylogeny
-        cell_order_values = adata.obs[['phylo_order']].values.transpose()
-        cell_ordering = np.lexsort(cell_order_values)
+        grid.plot()
 
-        X = X[cell_ordering, :]
+        return fig
 
-        mat = adata[cell_ordering, :].to_df(layer=layer_name)
-        if var_label is not None:
-            mat = mat.rename(columns=adata.var[var_label])
-        
-        cbar_ax = fig.add_axes([0.45, 0.0, 0.2, 0.01])
-        sns.heatmap(mat, ax=ax, cbar_ax=cbar_ax, cbar_kws={'orientation': 'horizontal'})
+    # Gene level data has no genomic bins to lay out, so it keeps the old
+    # seaborn path rather than moving onto CellGrid
+    from scgenome.tools.ordering import align_tree_to_order, tree_leaf_order
 
+    order = tree_leaf_order(tree)
+    aligned = align_tree_to_order(tree, order)
+
+    gs = gridspec.GridSpec(1, 3, width_ratios=(0.4, 0.58, 0.02))
+
+    ax = fig.add_subplot(gs[0, 0])
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.spines['bottom'].set_visible(True)
+    ax.spines['left'].set_visible(False)
+    ax.get_yaxis().set_ticks([])
+    Bio.Phylo.draw(aligned, label_func=lambda a: '', axes=ax, do_show=False)
+
+    ax = fig.add_subplot(gs[0, 1])
+
+    positions = adata.obs.index.get_indexer(order)
+    mat = adata[positions, :].to_df(layer=layer_name)
+    if var_label is not None:
+        mat = mat.rename(columns=adata.var[var_label])
+
+    cbar_ax = fig.add_axes([0.45, 0.0, 0.2, 0.01])
+    sns.heatmap(mat, ax=ax, cbar_ax=cbar_ax, cbar_kws={'orientation': 'horizontal'})
     ax.set_yticks([])
 
-    # Plot obs annotation
     if obs_annotation is not None:
         ax = fig.add_subplot(gs[0, 2])
-
-        color_mat, color_map = map_annotations_to_colors(adata.obs[obs_annotation], obs_cmap)
-        color_mat = np.swapaxes(np.array([color_mat]), 0, 1)
-
-        ax.imshow(color_mat[::-1, :, :], aspect='auto', origin='lower', interpolation='none')
+        values = adata.obs[obs_annotation].reindex(order).values.reshape(-1, 1)
+        _, value_colors = map_categorical_colors(values, cmap=obs_cmap)
+        ax.imshow(value_colors, aspect='auto', interpolation='none')
         ax.set_xticks([])
         ax.set_yticks([])
-
-        patches = []
-        for label, color in color_map.items():
-            patches.append(mpatches.Patch(color=color, label=label))
-        ax.legend(handles=patches, loc='upper left', bbox_to_anchor=(1.05, 1.))
 
     plt.subplots_adjust(left=0.065, right=0.97, top=0.96, bottom=0.065, wspace=0.01)
 

@@ -4,7 +4,7 @@ from .pca import pca_loadings
 from .sorting import sort_cells, sort_clusters, store_linkage
 from .ordering import (
     resolve_cell_order, resolve_bin_order, align_tree_to_order, tree_leaf_order,
-    OrderConflict)
+    linkage_order_conflict, OrderConflict)
 from .binfeat import count_gc, mean_from_bigwig, add_cyto_giemsa_stain
 from .genes import read_ensemble_genes_gtf, aggregate_genes, get_gene_cn
 from .concat import ad_concat_cells

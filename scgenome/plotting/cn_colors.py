@@ -204,14 +204,18 @@ def resolve_palette(palette):
     dict
         'mapper' is a callable from an array of values to an array of colors
         with shape values.shape + (3,), 'legend' is a callable taking an Axes
-        and a title and returning a Legend, and 'title' is the preferred
-        legend title for this palette or None to let the caller choose
+        and a title and returning a Legend, 'title' is the preferred legend
+        title for this palette or None to let the caller choose, and 'levels'
+        and 'colors' are the parallel lists a legend labels
     """
     if palette == 'cn':
+        states = list(color_reference.keys())
         return {
             'mapper': map_cn_colors,
             'legend': lambda ax, title: cn_legend(ax, title=title),
             'title': None,
+            'levels': states,
+            'colors': [color_reference[s] for s in states],
         }
 
     elif palette == 'allele_state':
@@ -219,6 +223,8 @@ def resolve_palette(palette):
             'mapper': map_allele_state_colors,
             'legend': lambda ax, title: allele_state_legend(ax, title=title),
             'title': 'AS CN state',
+            'levels': list(allele_state_names),
+            'colors': [allele_state_colors[n] for n in allele_state_names],
         }
 
     elif isinstance(palette, collections.abc.Mapping):
@@ -228,6 +234,8 @@ def resolve_palette(palette):
             'mapper': lambda X: map_discrete_colors(X, palette),
             'legend': lambda ax, title: _patch_legend(ax, levels, colors, title),
             'title': None,
+            'levels': levels,
+            'colors': colors,
         }
 
     raise ValueError(f"unknown palette {palette!r}, expected 'cn', 'allele_state' or a dict")

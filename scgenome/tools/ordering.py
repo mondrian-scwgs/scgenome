@@ -356,3 +356,65 @@ def resolve_bin_order(adata, genome=None):
     ordering = np.lexsort((adata.var['start'].values, bin_chr_index.values))
 
     return adata.var.index[ordering]
+
+
+def linkage_order_conflict(linkage, ids, order):
+    """ Find a merge in a linkage whose leaves are split by a row order
+
+    The dendrogram equivalent of the check in :func:`align_tree_to_order`. A
+    linkage can be drawn against a row order without its brackets crossing if
+    and only if every merge's leaves occupy a contiguous block of rows.
+
+    Parameters
+    ----------
+    linkage : numpy.ndarray
+        scipy linkage matrix over ``len(ids)`` observations
+    ids : sequence of str
+        labels the linkage rows refer to, in linkage observation order
+    order : iterable of str
+        cell ids in the requested row order
+
+    Returns
+    -------
+    tuple or None
+        ``(lo, hi, n_leaves)`` of the first merge whose leaves are split, or
+        None if the whole linkage is drawable against this order
+
+    Examples
+    --------
+
+    >>> import scgenome
+    >>> adata = scgenome.datasets.OV2295_HMMCopy_reduced()
+    >>> adata = scgenome.tl.sort_cells(adata, layer_name='copy')
+    >>> record = adata.uns['cell_order']['cell_order']
+    >>> order = adata.obs.sort_values('cell_order').index
+    >>> scgenome.tl.linkage_order_conflict(record['linkage'], record['ids'], order) is None
+    True
+
+    """
+    positions = {cell_id: i for i, cell_id in enumerate(order)}
+
+    n = len(ids)
+    spans = {}
+    for i, label in enumerate(ids):
+        position = positions.get(label)
+        if position is not None:
+            spans[i] = (position, position, 1)
+
+    for k, row in enumerate(np.asarray(linkage)):
+        left, right = int(row[0]), int(row[1])
+        placed = [spans[c] for c in (left, right) if c in spans]
+
+        if not placed:
+            continue
+
+        lo = min(span[0] for span in placed)
+        hi = max(span[1] for span in placed)
+        n_leaves = sum(span[2] for span in placed)
+
+        if hi - lo + 1 != n_leaves:
+            return lo, hi, n_leaves
+
+        spans[n + k] = (lo, hi, n_leaves)
+
+    return None
