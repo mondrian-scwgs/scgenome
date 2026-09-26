@@ -10,6 +10,53 @@ from typing import Union, Any, Dict, Iterable
 import scgenome.preprocessing.transform
 
 
+def _default_agg_fn(values):
+    """ Aggregation to use for a matrix whose function was not specified
+
+    Integer matrices hold copy number states, where a median keeps the result a
+    valid state. Continuous matrices are averaged. Both skip NaN.
+    """
+    if np.issubdtype(values.dtype, np.integer):
+        return 'median'
+    return 'mean'
+
+
+def _resolve_cluster_aggregation(adata, layer_name, agg_X, agg_layers):
+    """ Ensure the aggregate will carry whatever the sort is about to read
+
+    aggregate_clusters only aggregates what it is asked for, so with no
+    agg_layers it returns clusters with no layers at all, and sorting them
+    raises. Fill in the matrices named by ``layer_name``, leaving any
+    explicitly supplied function alone.
+    """
+    if isinstance(layer_name, (str, type(None))):
+        layer_names = [layer_name]
+    else:
+        layer_names = list(layer_name)
+
+    missing = [n for n in layer_names if n is not None and n not in adata.layers]
+    if missing:
+        raise ValueError(
+            f'sort_clusters: missing required layers {missing}. '
+            f'Available layers: {list(adata.layers.keys())}')
+
+    agg_layers = dict(agg_layers) if agg_layers is not None else {}
+
+    for name in layer_names:
+        if name is None:
+            if adata.X is None:
+                raise ValueError(
+                    'sort_clusters: layer_name is None, which sorts on X, but '
+                    'adata.X is None. Pass a layer name instead.')
+            if agg_X is None:
+                agg_X = _default_agg_fn(adata.X)
+
+        elif name not in agg_layers:
+            agg_layers[name] = _default_agg_fn(adata.layers[name])
+
+    return agg_X, agg_layers
+
+
 def sort_cells(
         adata: AnnData,
         layer_name: Union[None, str, Iterable[Union[None,str]]]='copy',
@@ -133,9 +180,13 @@ def sort_clusters(
     cluster_col : str, optional
         column of cluster labels to sort
     agg_X : Any
-        function to aggregate X, by default None
+        function to aggregate X, by default None. Only needed when
+        ``layer_name`` is None, in which case a default is chosen.
     agg_layers : Dict, optional
-        functions to aggregate layers keyed by layer names, by default None
+        functions to aggregate layers keyed by layer names, by default None.
+        Whatever ``layer_name`` names is aggregated regardless, since the sort
+        reads it; a median for integer layers and a mean otherwise. Functions
+        given here are used as supplied.
     cell_ids : str, optional
         subset of cells to cluster, by default None
     bin_ids : str, optional
@@ -164,6 +215,9 @@ def sort_clusters(
     if bin_ids is None:
         bin_ids = adata.var.index
 
+    agg_X, agg_layers = _resolve_cluster_aggregation(
+        adata, layer_name, agg_X, agg_layers)
+
     adata_clusters = scgenome.tools.cluster.aggregate_clusters(
         adata[cell_ids, bin_ids], cluster_col=cluster_col, agg_X=agg_X, agg_layers=agg_layers)
 
@@ -172,10 +226,14 @@ def sort_clusters(
         layer_name=layer_name,
         standardize=standardize)
 
+    # aggregate_clusters indexes clusters by str(cluster id), so the lookup
+    # back has to stringify too or a non string cluster column misses entirely
+    cluster_keys = adata.obs.loc[cell_ids, cluster_col].astype(str)
+
     adata.obs['cluster_order'] = np.nan
     adata.obs.loc[cell_ids, 'cluster_order'] = pd.Series(
-        adata_clusters.obs.loc[adata.obs.loc[cell_ids, cluster_col].values, 'cell_order'].values,
-        index=adata.obs.loc[cell_ids].index)
+        adata_clusters.obs.loc[cluster_keys.values, 'cell_order'].values,
+        index=cluster_keys.index)
 
     return adata
 
