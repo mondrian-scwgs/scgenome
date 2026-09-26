@@ -88,6 +88,32 @@ it matches by equality and renders almost everything white;
 `pl.plot_cell_cn_matrix`/`_fig` and the `raw=` argument are deprecated aliases
 kept for compatibility; use the table above instead.
 
+## Ordering
+
+Row and column order is a value, not a side effect of plotting.
+`tl.resolve_cell_order` reads an adata and returns a `pd.Index`; it mutates
+nothing. Pass the result to several panels via `cell_order=` and their rows are
+guaranteed to line up:
+
+```python
+order = scgenome.tl.resolve_cell_order(adata, fields=['cluster_id', 'cell_order'])
+scgenome.pl.plot_cell_tcn_matrix(adata, cell_order=order, ax=axes[0])
+scgenome.pl.plot_cell_matrix(adata, layer_name='copy', cell_order=order, ax=axes[1])
+```
+
+`cell_order_fields=` remains as sugar for `resolve_cell_order(adata, fields=...)`.
+The two are mutually exclusive.
+
+A tree **constrains** the order rather than competing with it, so sort fields
+are allowed alongside one and order cells *within* clades. An order is drawable
+against a tree iff every clade's leaves occupy a contiguous block of rows; if
+not, `OrderConflict` is raised rather than rendering a plot that implies
+groupings which do not exist. Pass `on_conflict='reorder'` to let the tree drive
+row order, with the fields tie-breaking within clades.
+
+`tl.sort_cells` keeps the linkage in `uns['cell_order'][column]`, so the
+dendrogram behind an ordering can be drawn without reclustering.
+
 ## Function Conventions
 
 - All `tl.*` and `pp.*` functions that operate on adata take `AnnData` as first argument and return the same `AnnData` (mutated in-place).
@@ -102,8 +128,11 @@ kept for compatibility; use the table above instead.
 | `pp.calculate_filter_metrics` | layers['copy','state'] | obs['filter_*'], obsm['copy_state_diff*'] |
 | `pp.filter_cells` | obs[filter columns] | subsets cells |
 | `tl.cluster_cells` | layers[layer_name] | obs['cluster_id','cluster_size'], uns['clustering'] |
-| `tl.sort_cells` | layers[layer_name] | obs['cell_order'] |
-| `tl.sort_clusters` | layers[layer_name], obs[cluster_col] | obs['cluster_order'] |
+| `tl.sort_cells` | layers[layer_name] | obs['cell_order'], uns['cell_order']['cell_order'] |
+| `tl.sort_clusters` | layers[layer_name], obs[cluster_col] | obs['cluster_order'], uns['cell_order']['cluster_order'] |
+| `tl.resolve_cell_order` | obs[fields], tree | nothing, returns a `pd.Index` |
+| `tl.resolve_bin_order` | var['chr','start'] | nothing, returns a `pd.Index` |
+| `tl.align_tree_to_order` | tree | nothing, returns a rotated copy |
 | `tl.detect_outliers` | layers[layer_name] | obs['is_outlier'], uns['outliers'] |
 | `tl.pca_loadings` | layers[layer] or X | obsm['X_pca'], varm['PCs'], uns['pca'] |
 | `tl.compute_umap` | layers[layer_name] | obs['UMAP1','UMAP2'] |

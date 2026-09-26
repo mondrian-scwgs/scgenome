@@ -57,6 +57,49 @@ def _resolve_cluster_aggregation(adata, layer_name, agg_X, agg_layers):
     return agg_X, agg_layers
 
 
+def store_linkage(adata, key, linkage, leaves, ids, layer=None,
+                  metric='cityblock', method='complete', standardize=False):
+    """ Record the hierarchical clustering behind an ordering
+
+    An ordering column flattens a tree into a permutation, losing the structure
+    a dendrogram needs. Keeping the linkage makes that structure recoverable
+    without reclustering. Records are keyed by the obs column they explain, so
+    cell level and cluster level orderings coexist.
+
+    Parameters
+    ----------
+    adata : AnnData
+        data to annotate
+    key : str
+        obs column this linkage explains, for instance 'cell_order'
+    linkage : numpy.ndarray
+        scipy linkage matrix
+    leaves : numpy.ndarray
+        leaf indices into ``ids``, in dendrogram order
+    ids : numpy.ndarray
+        labels the linkage rows refer to, in adata order
+    layer : str, optional
+        layer the distances were computed on, None for X
+    metric, method : str, optional
+        arguments the linkage was built with
+    standardize : bool, optional
+        whether values were standardized first
+
+    Modifies
+    --------
+    adata.uns['cell_order'][key] : linkage, leaves, ids and clustering parameters
+    """
+    adata.uns.setdefault('cell_order', {})[key] = {
+        'linkage': linkage,
+        'leaves': np.asarray(leaves),
+        'ids': np.asarray(ids),
+        'layer': layer,
+        'metric': metric,
+        'method': method,
+        'standardize': standardize,
+    }
+
+
 def sort_cells(
         adata: AnnData,
         layer_name: Union[None, str, Iterable[Union[None,str]]]='copy',
@@ -91,6 +134,8 @@ def sort_cells(
     Modifies
     --------
     adata.obs['cell_order'] : integer ordering of cells by hierarchical clustering
+    adata.uns['cell_order']['cell_order'] : the linkage behind that ordering, so a
+        dendrogram can be drawn without reclustering
 
     Notes
     -----
@@ -156,6 +201,13 @@ def sort_cells(
     adata.obs['cell_order'] = np.nan
     adata.obs.loc[cell_ids, 'cell_order'] = pd.Series(ordering, index=adata.obs.loc[cell_ids].index)
 
+    # The linkage describes the structure the ordering flattens, and a
+    # dendrogram cannot be drawn from the leaf order alone
+    store_linkage(
+        adata, 'cell_order', Y, idx,
+        np.asarray(adata.obs.loc[cell_ids].index),
+        layer=layer_name, standardize=standardize)
+
     return adata
 
 
@@ -207,6 +259,8 @@ def sort_clusters(
     Modifies
     --------
     adata.obs['cluster_order'] : integer ordering of clusters
+    adata.uns['cell_order']['cluster_order'] : the cluster level linkage behind
+        that ordering
     """
 
     if cell_ids is None:
@@ -234,6 +288,13 @@ def sort_clusters(
     adata.obs.loc[cell_ids, 'cluster_order'] = pd.Series(
         adata_clusters.obs.loc[cluster_keys.values, 'cell_order'].values,
         index=cluster_keys.index)
+
+    # sort_cells stored a linkage over the aggregated clusters, which is
+    # discarded with the aggregate unless we carry it across
+    clustering = adata_clusters.uns.get('cell_order', {}).get('cell_order')
+    if clustering is not None:
+        adata.uns.setdefault('cell_order', {})['cluster_order'] = dict(
+            clustering, level='cluster', cluster_col=cluster_col)
 
     return adata
 

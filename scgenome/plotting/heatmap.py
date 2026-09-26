@@ -15,6 +15,8 @@ from matplotlib.patches import Patch
 import matplotlib.cm
 
 import scgenome.refgenome
+from scgenome.tools.ordering import (
+    align_tree_to_order, resolve_bin_order, resolve_cell_order)
 from . import cn_colors
 
 
@@ -22,6 +24,7 @@ def plot_cell_matrix(
         adata: AnnData,
         layer_name=None,
         cell_order_fields=(),
+        cell_order=None,
         ax=None,
         vmin=None,
         vmax=None,
@@ -45,6 +48,10 @@ def plot_cell_matrix(
         layer with values to plot, None for X, by default None
     cell_order_fields : list, optional
         columns of obs on which to sort cells, by default None
+    cell_order : pandas.Index, optional
+        explicit cell ids in plot order, from `scgenome.tl.resolve_cell_order`.
+        Mutually exclusive with cell_order_fields. Pass one order to several
+        panels so their rows are guaranteed to line up.
     ax : matplotlib.axes.Axes, optional
         existing axis to plot into, by default None
     vmin, vmax : float, optional
@@ -90,23 +97,28 @@ def plot_cell_matrix(
     if ax is None:
         ax = plt.gca()
 
-    # Order the chromosomes
     genome_info = scgenome.refgenome.get_genome_info(adata)
-    chr_start = adata.var.reset_index().merge(genome_info.chromosome_info[['chr', 'chr_index']], how='left')
-    if chr_start['chr_index'].isnull().any():
-        chromosomes = adata.var['chr'].astype(str).values
-        raise ValueError(f'mismatching chromosomes {chromosomes} and {genome_info.chromosomes}')
-    chr_start = chr_start[['start', 'chr_index']].values
-    genome_ordering = np.lexsort(chr_start.transpose())
 
-    # Order the cells if requested
-    if len(cell_order_fields) > 0:
-        cell_order_fields = reversed(list(cell_order_fields))
-        cell_order_values = adata.obs[cell_order_fields].values.transpose()
-        cell_ordering = np.lexsort(cell_order_values)
+    if cell_order is not None and len(cell_order_fields) > 0:
+        raise ValueError(
+            'cannot provide both cell_order and cell_order_fields, '
+            'cell_order_fields is sugar for resolve_cell_order(adata, fields=...)')
 
-    else:
-        cell_ordering = range(adata.shape[0])
+    if cell_order is None:
+        cell_order = resolve_cell_order(adata, fields=cell_order_fields)
+
+    bin_order = resolve_bin_order(adata, genome=genome_info)
+
+    # Back to positions, so the behaviour matches a positional reorder and a
+    # cell id absent from adata is reported rather than silently dropped
+    cell_ordering = adata.obs.index.get_indexer(pd.Index(cell_order))
+    if (cell_ordering < 0).any():
+        unknown = pd.Index(cell_order)[cell_ordering < 0]
+        raise ValueError(
+            f'{len(unknown)} cells in cell_order are not in adata, for instance '
+            f'{list(unknown[:3])}')
+
+    genome_ordering = adata.var.index.get_indexer(bin_order)
 
     adata = adata[cell_ordering, genome_ordering]
 
@@ -130,7 +142,11 @@ def plot_cell_matrix(
             cmap = matplotlib.colormaps[cmap]
         im = ax.imshow(X, aspect='auto', cmap=cmap, interpolation='none', vmin=vmin, vmax=vmax, rasterized=rasterized)
 
-    mat_chrom_idxs = chr_start[genome_ordering][:, 1]
+    chr_index = (
+        genome_info.chromosome_info
+        .astype({'chr': str})
+        .set_index('chr')['chr_index'])
+    mat_chrom_idxs = adata.var['chr'].astype(str).map(chr_index).values.astype(int)
     chrom_boundaries = np.array([0] + list(1 + np.where(mat_chrom_idxs[1:] != mat_chrom_idxs[:-1])[0]) + [mat_chrom_idxs.shape[0]])
     chrom_sizes = chrom_boundaries[1:] - chrom_boundaries[:-1]
     chrom_mids = chrom_boundaries[:-1] + chrom_sizes / 2
@@ -320,6 +336,7 @@ def plot_cell_matrix_fig(
         layer_name=None,
         tree=None,
         cell_order_fields=None,
+        cell_order=None,
         annotation_fields=None,
         annotation_cmap=None,
         var_annotation_fields=None,
@@ -349,6 +366,9 @@ def plot_cell_matrix_fig(
         phylogenetic tree
     cell_order_fields : list, optional
         columns of obs on which to sort cells, by default None
+    cell_order : pandas.Index, optional
+        explicit cell ids in plot order, from `scgenome.tl.resolve_cell_order`.
+        Mutually exclusive with cell_order_fields and tree.
     annotation_fields : list, optional
         column of obs to use as an annotation colorbar, by default 'cluster_id'
     fig : matplotlib.figure.Figure, optional
@@ -404,34 +424,33 @@ def plot_cell_matrix_fig(
     if cell_order_fields is None:
         cell_order_fields = []
 
-    if annotation_fields is None:
-        annotation_fields = []
-    
+    # Copied, not aliased: show_subsets appends and must not grow the
+    # caller's list across calls
+    annotation_fields = list(annotation_fields) if annotation_fields is not None else []
+
     if annotation_cmap is None:
         annotation_cmap = {}
 
-    if var_annotation_fields is None:
-        var_annotation_fields = []
+    var_annotation_fields = list(var_annotation_fields) if var_annotation_fields is not None else []
 
     if var_annotation_cmap is None:
         var_annotation_cmap = {}
 
     if tree is not None:
-        if cell_order_fields is not None and len(cell_order_fields) > 0:
-            raise ValueError('cannot provide cell_order_fields and tree')
+        if cell_order is not None:
+            raise ValueError('cannot provide both cell_order and tree')
 
-        # Add phylogenetic ordering to anndata obs
-        cell_ids = []
-        for a in tree.get_terminals():
-            cell_ids.append(a.name)
+        # A tree constrains the row order rather than competing with it, so
+        # sort fields are allowed and order cells within clades. Resolving
+        # reads the tree instead of writing phylo_order onto the caller's
+        # adata, and raises OrderConflict if the tree cannot be drawn against
+        # the requested order.
+        cell_order = resolve_cell_order(adata, fields=cell_order_fields, tree=tree)
 
-        assert set(cell_ids) == set(adata.obs.index), 'tree and adata have different cells'
+        # Rotate a copy of the tree so the drawn leaves match the rows
+        tree = align_tree_to_order(tree, cell_order)
 
-        adata.obs['phylo_order'] = -1
-        for idx, _ in adata.obs.iterrows():
-            adata.obs.loc[idx, 'phylo_order'] = cell_ids.index(idx)
-
-        cell_order_fields = ['phylo_order']
+        cell_order_fields = []
         num_phylo = 1
         tree_ax_idx = 0
         heatmap_ax_col_idx = 1
@@ -506,6 +525,7 @@ def plot_cell_matrix_fig(
     g = plot_cell_matrix(
         adata, layer_name=layer_name,
         cell_order_fields=cell_order_fields,
+        cell_order=cell_order,
         ax=heatmap_ax, vmin=vmin, vmax=vmax, cmap=cmap, palette=palette,
         show_cell_ids=show_cell_ids,
         style=style)
@@ -531,8 +551,7 @@ def plot_cell_matrix_fig(
         adata = adata.copy()
         adata.obs['subset'] = pd.Series(np.mod(np.floor_divide(range(adata.shape[0]), 40), 5), index=adata.obs.index, dtype='category')
         adata.obs['superset'] = pd.Series(np.floor_divide(range(adata.shape[0]), 200), index=adata.obs.index, dtype='category')
-        annotation_fields.append('superset')
-        annotation_fields.append('subset')
+        annotation_fields = annotation_fields + ['superset', 'subset']
 
     annotation_info = {}
 

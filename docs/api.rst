@@ -61,6 +61,17 @@ Clustering and ordering
    tl.aggregate_clusters
    tl.aggregate_clusters_hmmcopy
 
+Ordering
+~~~~~~~~
+
+.. autosummary::
+   :toctree: generated/
+
+   tl.resolve_cell_order
+   tl.resolve_bin_order
+   tl.align_tree_to_order
+   tl.tree_leaf_order
+
 Embeddings
 ~~~~~~~~~~
 
