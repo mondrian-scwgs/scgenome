@@ -206,7 +206,8 @@ def test_stored_leaves_agree_with_the_cell_order_column():
 
 def test_sort_clusters_keeps_the_cluster_level_linkage():
     adata = scgenome.datasets.OV2295_HMMCopy_reduced()
-    # agg_layers is required: aggregate_clusters produces no layers without it
+    # Explicit agg_layers until fix-sort-clusters-defaults lands; without it
+    # aggregate_clusters returns clusters carrying no layers to sort
     adata = scgenome.tl.sort_clusters(
         adata, layer_name='copy', agg_layers={'copy': np.nanmedian})
 
