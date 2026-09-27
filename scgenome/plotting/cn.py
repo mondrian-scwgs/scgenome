@@ -966,12 +966,12 @@ def plot_rearrangement_arcs(
     # Default colors by strand combination (strand_left, strand_right)
     # '?' indicates out-of-view partner
     default_strand_colors = {
-        ('+', '+'): '#31a354',  # green - inversion (same strand)
-        ('+', '-'): '#3182bd',  # blue - deletion-like
-        ('-', '+'): '#e6550d',  # orange - duplication-like
-        ('-', '-'): '#756bb1',  # purple - inversion (same strand)
-        ('+', '?'): '#74c476',  # light green - out of view, + strand visible
-        ('-', '?'): '#9e9ac8',  # light purple - out of view, - strand visible
+        ('+', '+'): '#f47c20',  # inversion (same strand)
+        ('+', '-'): '#3f5ba9',  # deletion-like
+        ('-', '+'): '#e61e25',  # duplication-like
+        ('-', '-'): '#47b649',  # inversion (same strand)
+        ('+', '?'): '#7850a1',  # out of view, + strand visible
+        ('-', '?'): '#9f4b23',  # out of view, - strand visible
     }
     if strand_colors is not None:
         default_strand_colors.update(strand_colors)
