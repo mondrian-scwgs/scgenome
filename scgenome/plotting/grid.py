@@ -19,7 +19,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from scgenome.tools.ordering import resolve_cell_order
+from scgenome.tools.ordering import resolve_cell_order, tree_leaf_order
 from . import panels as _panels
 
 
@@ -85,11 +85,11 @@ class CellGrid:
         explicit cell ids in row order, mutually exclusive with
         ``cell_order_fields``
     tree : Bio.Phylo.BaseTree.Tree, optional
-        tree constraining the row order. Does not itself add a tree panel, use
-        :meth:`add_tree` for that.
-    on_conflict : str, optional
-        'raise' to refuse a row order the tree cannot reproduce, 'reorder' to
-        let the tree drive it, by default 'raise'
+        tree whose leaf order becomes the row order. Mutually exclusive with
+        ``cell_order`` and ``cell_order_fields``: a tree already is an order,
+        and making one agree with a different one is
+        :func:`~scgenome.tl.align_tree_to_order`, called explicitly. Does not
+        itself add a tree panel, use :meth:`add_tree` for that.
     figsize : tuple, optional
         figure size, used only when creating a figure
     fig : matplotlib.figure.Figure, optional
@@ -118,26 +118,35 @@ class CellGrid:
     """
 
     def __init__(self, adata, cell_order_fields=None, cell_order=None, tree=None,
-                 on_conflict='raise', figsize=None, fig=None, style='black'):
-        if cell_order is not None and cell_order_fields:
+                 figsize=None, fig=None, style='black'):
+        given = []
+        if cell_order is not None:
+            given.append('cell_order')
+        if cell_order_fields:
+            given.append('cell_order_fields')
+        if tree is not None:
+            given.append('tree')
+
+        if len(given) > 1:
             raise ValueError(
-                'cannot provide both cell_order and cell_order_fields, '
-                'cell_order_fields is sugar for resolve_cell_order(adata, fields=...)')
+                f'rows can only be ordered one way, but {given} were given. A tree '
+                f'is already an order; to make one agree with another, rotate it '
+                f'first with scgenome.tl.align_tree_to_order.')
 
         self.adata = adata
         self.style = style
         self.figsize = figsize
         self.fig = fig
 
-        if cell_order is not None:
+        if tree is not None:
+            self.cell_order = pd.Index(tree_leaf_order(tree))
+        elif cell_order is not None:
             self.cell_order = pd.Index(cell_order)
         else:
-            self.cell_order = resolve_cell_order(
-                adata, fields=cell_order_fields, tree=tree, on_conflict=on_conflict)
+            self.cell_order = resolve_cell_order(adata, fields=cell_order_fields)
 
         self._panels = []
         self._tree = tree
-        self._on_conflict = on_conflict
 
     # --- panels ---------------------------------------------------------
 
@@ -276,7 +285,9 @@ class CellGrid:
         Parameters
         ----------
         tree : Bio.Phylo.BaseTree.Tree, optional
-            tree to draw, by default the one given to the constructor
+            tree to draw, by default the one given to the constructor. Its
+            leaves must already be the grid's row order; rotate it with
+            :func:`~scgenome.tl.align_tree_to_order` if they are not.
         name : str, optional
             panel name
         width : float, optional
@@ -291,11 +302,18 @@ class CellGrid:
         if tree is None:
             raise ValueError('no tree given, pass one here or to CellGrid')
 
+        leaves = tree_leaf_order(tree)
+        if leaves != list(self.cell_order):
+            raise ValueError(
+                "this tree's leaves are not the grid's row order, so drawing it "
+                'would imply groupings that are not there. Rotate it first with '
+                'scgenome.tl.align_tree_to_order(tree, grid.cell_order), or build '
+                'the grid from the tree with CellGrid(adata, tree=tree).')
+
         name = self._unique_name(name)
 
         def draw(ax, _tree=tree):
-            return _panels.tree(
-                _tree, ax, cell_order=self.cell_order, on_conflict=self._on_conflict)
+            return _panels.tree(_tree, ax)
 
         return self._add(_Panel('tree', name, width, draw))
 

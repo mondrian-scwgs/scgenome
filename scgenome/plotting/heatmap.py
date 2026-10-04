@@ -16,7 +16,7 @@ import matplotlib.cm
 
 import scgenome.refgenome
 from scgenome.tools.ordering import (
-    align_tree_to_order, resolve_bin_order, resolve_cell_order)
+    align_tree_to_order, resolve_bin_order, resolve_cell_order, tree_leaf_order)
 from . import cn_colors
 from . import panels
 from .grid import CellGrid
@@ -190,7 +190,9 @@ def plot_cell_matrix_fig(
         columns of obs on which to sort cells, by default None
     cell_order : pandas.Index, optional
         explicit cell ids in plot order, from `scgenome.tl.resolve_cell_order`.
-        Mutually exclusive with cell_order_fields and tree.
+        Mutually exclusive with cell_order_fields and tree: a tree is already
+        an order, so reconciling one with another is
+        `scgenome.tl.align_tree_to_order`, called explicitly.
     annotation_fields : list, optional
         column of obs to use as an annotation colorbar, by default 'cluster_id'
     fig : matplotlib.figure.Figure, optional
@@ -246,14 +248,26 @@ def plot_cell_matrix_fig(
     annotation_cmap = annotation_cmap or {}
     var_annotation_cmap = var_annotation_cmap or {}
 
-    if cell_order is not None and tree is not None:
-        raise ValueError('cannot provide both cell_order and tree')
-
+    given = []
     if cell_order is not None:
+        given.append('cell_order')
+    if cell_order_fields:
+        given.append('cell_order_fields')
+    if tree is not None:
+        given.append('tree')
+
+    if len(given) > 1:
+        raise ValueError(
+            f'rows can only be ordered one way, but {given} were given. A tree is '
+            f'already an order; to make one agree with another, rotate it first '
+            f'with scgenome.tl.align_tree_to_order.')
+
+    if tree is not None:
+        order = pd.Index(tree_leaf_order(tree))
+    elif cell_order is not None:
         order = pd.Index(cell_order)
     else:
-        order = resolve_cell_order(
-            adata, fields=cell_order_fields or [], tree=tree)
+        order = resolve_cell_order(adata, fields=cell_order_fields or [])
 
     if show_subsets:
         # Subsets number the rows as drawn, so they follow display position
@@ -267,7 +281,7 @@ def plot_cell_matrix_fig(
             index=adata.obs.index, dtype='category')
         annotation_fields = annotation_fields + ['superset', 'subset']
 
-    grid = CellGrid(adata, cell_order=order, tree=tree, fig=fig, style=style)
+    grid = CellGrid(adata, cell_order=order, fig=fig, style=style)
 
     if tree is not None:
         grid.add_tree(tree)

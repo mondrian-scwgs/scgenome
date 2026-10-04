@@ -459,8 +459,15 @@ def var_annotation(adata, ax, field, bin_order=None, cmap=None, style='black'):
     return _annotation(values, ax, field, horizontal=True, cmap=cmap, style=style)
 
 
-def tree(tree, ax, cell_order=None, linewidth=0.5, on_conflict='raise'):
-    """ Draw a phylogenetic tree aligned to heatmap rows
+def tree(tree, ax, linewidth=0.5):
+    """ Draw a phylogenetic tree beside heatmap rows
+
+    Draws the tree exactly as given, top to bottom. Rows line up when the row
+    order is the tree's own leaf order, which is what
+    :func:`~scgenome.tl.tree_leaf_order` returns and what
+    :class:`~scgenome.pl.CellGrid` uses when handed a tree. To draw a tree
+    against some other order, rotate it first with
+    :func:`~scgenome.tl.align_tree_to_order`.
 
     Parameters
     ----------
@@ -468,23 +475,13 @@ def tree(tree, ax, cell_order=None, linewidth=0.5, on_conflict='raise'):
         tree whose leaf names are cell ids, not modified
     ax : matplotlib.axes.Axes
         axes to draw into
-    cell_order : pandas.Index, optional
-        cell ids in row order. The tree is rotated to match, and
-        ``OrderConflict`` is raised if no rotation does.
     linewidth : float, optional
         width of tree branches, by default 0.5
-    on_conflict : str, optional
-        passed to :func:`~scgenome.tl.align_tree_to_order`, by default 'raise'
 
     Returns
     -------
     PanelResult
     """
-    from scgenome.tools.ordering import align_tree_to_order
-
-    if cell_order is not None:
-        tree = align_tree_to_order(tree, cell_order, on_conflict=on_conflict)
-
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
     ax.spines['bottom'].set_visible(True)

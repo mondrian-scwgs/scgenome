@@ -195,7 +195,7 @@ def align_tree_to_order(tree, order, on_conflict='raise', fields=None):
     return tree
 
 
-def resolve_cell_order(adata, fields=None, tree=None, on_conflict='raise'):
+def resolve_cell_order(adata, fields=None):
     """ Resolve the order in which cells are drawn
 
     Parameters
@@ -205,13 +205,6 @@ def resolve_cell_order(adata, fields=None, tree=None, on_conflict='raise'):
     fields : list, optional
         obs columns to sort on, first is primary, by default None for the
         existing obs order
-    tree : Bio.Phylo.BaseTree.Tree, optional
-        tree constraining the order. With ``fields``, the fields order is used
-        and checked against the tree. Without, the tree's leaf order is used.
-    on_conflict : str, optional
-        'raise' to refuse an order the tree cannot reproduce, 'reorder' to let
-        the tree drive row order with ``fields`` tie breaking within clades,
-        by default 'raise'
 
     Returns
     -------
@@ -222,10 +215,12 @@ def resolve_cell_order(adata, fields=None, tree=None, on_conflict='raise'):
     -----
     adata.obs[fields] : sort keys
 
-    Raises
-    ------
-    scgenome.tl.OrderConflict
-        if ``tree`` and ``fields`` disagree and ``on_conflict`` is 'raise'
+    Notes
+    -----
+    To order cells by a tree instead, use :func:`tree_leaf_order`. To make a
+    tree agree with an order resolved here, rotate it first with
+    :func:`align_tree_to_order`; plotting functions take a tree or an order,
+    not both, so that reconciliation is always something you asked for.
 
     Examples
     --------
@@ -240,20 +235,12 @@ def resolve_cell_order(adata, fields=None, tree=None, on_conflict='raise'):
     Hand one order to several panels so they are guaranteed to agree::
 
         order = scgenome.tl.resolve_cell_order(adata, fields=['cluster_id', 'cell_order'])
-        scgenome.pl.plot_cell_tcn_matrix(adata, cell_order=order, ax=axes[0])
-        scgenome.pl.plot_cell_matrix(adata, layer_name='copy', cell_order=order, ax=axes[1])
+        scgenome.pl.plot_heatmap(adata, axes[0], layer='state', palette='cn',
+                                 cell_order=order)
+        scgenome.pl.plot_heatmap(adata, axes[1], layer='copy', cell_order=order)
 
     """
     validate_adata(adata, caller='resolve_cell_order')
-
-    if on_conflict == 'tangle':
-        raise NotImplementedError(
-            "on_conflict='tangle' arrives with the dendrogram panel. Use 'reorder' "
-            "to let the tree drive row order, or 'raise' to refuse the order")
-
-    if on_conflict not in ('raise', 'reorder'):
-        raise ValueError(
-            f"unknown on_conflict {on_conflict!r}, expected 'raise' or 'reorder'")
 
     fields = list(fields) if fields is not None else []
 
@@ -263,47 +250,13 @@ def resolve_cell_order(adata, fields=None, tree=None, on_conflict='raise'):
             f'missing obs columns {missing} for cell ordering. '
             f'Available obs columns: {list(adata.obs.columns)}')
 
-    if fields:
-        # lexsort applies the last key first, so reverse to make fields[0] primary
-        keys = adata.obs[list(reversed(fields))].values.transpose()
-        order = adata.obs.index[np.lexsort(keys)]
-    else:
-        order = adata.obs.index
-
-    if tree is None:
-        return pd.Index(order)
-
-    leaves = tree_leaf_order(tree)
-    cells = set(adata.obs.index)
-
-    absent = [name for name in leaves if name not in cells]
-    if absent:
-        raise ValueError(
-            f'{len(absent)} tree leaves are not cells in adata, for instance '
-            f'{absent[:3]}. Prune the tree with scgenome.tl.prune_leaves, or '
-            f'subset adata to the tree leaves.')
-
     if not fields:
-        extra = [c for c in adata.obs.index if c not in set(leaves)]
-        if extra:
-            raise ValueError(
-                f'{len(extra)} cells are not leaves of the tree and no fields were '
-                f'given to order them, for instance {extra[:3]}. Pass fields= to '
-                f'order all cells, or subset adata to the tree leaves.')
-        return pd.Index(leaves)
+        return pd.Index(adata.obs.index)
 
-    aligned = align_tree_to_order(tree, order, on_conflict=on_conflict, fields=fields)
+    # lexsort applies the last key first, so reverse to make fields[0] primary
+    keys = adata.obs[list(reversed(fields))].values.transpose()
 
-    if on_conflict == 'reorder':
-        rotated = tree_leaf_order(aligned)
-        if len(rotated) != len(order):
-            raise ValueError(
-                f"on_conflict='reorder' needs every cell to be a tree leaf, but "
-                f'{len(order) - len(rotated)} of {len(order)} cells are not. Subset '
-                f'adata to the tree leaves, or use the default on_conflict=\'raise\'.')
-        return pd.Index(rotated)
-
-    return pd.Index(order)
+    return pd.Index(adata.obs.index[np.lexsort(keys)])
 
 
 def resolve_bin_order(adata, genome=None):

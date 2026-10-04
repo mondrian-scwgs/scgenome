@@ -156,17 +156,29 @@ print(list(g.legends))
 `uns['cell_order']`, so it describes the clustering the ordering actually came
 from rather than a fresh one. `add_tree` draws a phylogeny instead.
 
-A tree constrains the row order rather than competing with it, so sort fields
-are allowed alongside one and order cells *within* clades.
+Handed a tree, a grid takes that tree's leaf order as its row order. The tree
+below is built from the stored linkage, which is also how you turn scgenome's
+clustering into a `Bio.Phylo` tree.
 
 
 ```python
 
 import io
 import Bio.Phylo
+import scipy.cluster.hierarchy as sch
 
-leaves = list(adata.obs.sort_values('cell_order').index)
-tree = Bio.Phylo.read(io.StringIO('(' + ','.join(f'{c}:1' for c in leaves) + ');'), 'newick')
+record = adata.uns['cell_order']['cell_order']
+ids = list(record['ids'])
+
+
+def to_newick(node):
+    if node.is_leaf():
+        return f'{ids[node.id]}:{node.dist:.4f}'
+    return f'({to_newick(node.left)},{to_newick(node.right)}):{node.dist:.4f}'
+
+
+tree = Bio.Phylo.read(
+    io.StringIO(to_newick(sch.to_tree(record['linkage'])) + ';'), 'newick')
 
 g = (scgenome.pl.CellGrid(adata, tree=tree, figsize=(12, 5))
      .add_tree()
@@ -177,43 +189,66 @@ g = (scgenome.pl.CellGrid(adata, tree=tree, figsize=(12, 5))
 ```
 
 
-An order is drawable against a tree or a dendrogram only if every clade's
-leaves occupy a contiguous block of rows. If they do not, the brackets would
-cross, and drawing anyway would render cleanly while implying groupings that do
-not exist. So it raises instead.
+A tree is already an ordering, so a grid takes a tree or a cell order, never
+both. When you want a tree *and* a particular sort, reconcile them yourself and
+pass the result. `align_tree_to_order` only rotates internal nodes, which never
+changes the topology or a branch length, so it is choosing among the orders the
+tree already admits.
 
-This is not a corner case: grouping by cluster before ordering within clusters
+Not every order is one of them. A clade whose leaves do not land in one
+contiguous block cannot be drawn without its brackets crossing, and a drawing
+like that renders cleanly while implying groupings that are not there. So it
+raises rather than returning such a tree.
+
+This is not a corner case. Grouping by cluster before ordering within clusters
 is the idiom `tl.sort_cells` itself recommends, and it generally does split the
-clades of the dendrogram built from that same clustering.
+clades of the tree built from that same clustering.
 
 
 ```python
 
-order = scgenome.tl.resolve_cell_order(adata, fields=['cluster_id', 'cell_order'])
+grouped = scgenome.tl.resolve_cell_order(adata, fields=['cluster_id', 'cell_order'])
 
 try:
-    (scgenome.pl.CellGrid(adata, cell_order=order)
-     .add_dendrogram()
-     .add_heatmap('state', palette='cn')
-     .plot())
+    scgenome.tl.align_tree_to_order(tree, grouped)
 except scgenome.tl.OrderConflict as error:
     print(str(error).splitlines()[0])
 
 ```
 
 
-Pass `on_conflict='reorder'` to let the tree drive the rows, with the fields
-tie-breaking within clades, instead of refusing:
+Pass `on_conflict='reorder'` when you would rather have the tree win, with the
+requested order tie-breaking within clades, than be refused. The result is a
+tree you can hand straight to a grid.
 
 
 ```python
 
-g = (scgenome.pl.CellGrid(adata, cell_order_fields=['cluster_id', 'cell_order'],
-                          tree=tree, on_conflict='reorder', figsize=(12, 5))
+rescued = scgenome.tl.align_tree_to_order(tree, grouped, on_conflict='reorder')
+
+g = (scgenome.pl.CellGrid(adata, tree=rescued, figsize=(12, 5))
      .add_tree()
      .add_heatmap('state', palette='cn', name='Total CN')
      .add_obs_annotation('cluster_id')
      .plot())
+
+```
+
+
+The dendrogram panel applies the same contiguity rule, since there is no
+pre-rotated linkage to hand it. It has no reconciliation mode: it draws, or it
+tells you the order would cross its brackets.
+
+
+```python
+
+try:
+    (scgenome.pl.CellGrid(adata, cell_order=grouped)
+     .add_dendrogram()
+     .add_heatmap('state', palette='cn')
+     .plot())
+except scgenome.tl.OrderConflict as error:
+    print(str(error).splitlines()[0])
 
 ```
 

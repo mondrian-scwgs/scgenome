@@ -316,10 +316,36 @@ def test_grid_does_not_modify_adata(adata, tree):
     plt.close('all')
 
 
-def test_cell_order_and_fields_are_mutually_exclusive(adata):
-    with pytest.raises(ValueError, match='cannot provide both'):
+def test_rows_can_only_be_ordered_one_way(adata):
+    with pytest.raises(ValueError, match='ordered one way'):
         scgenome.pl.CellGrid(
             adata, cell_order_fields=['cell_order'], cell_order=adata.obs.index)
+
+
+def test_a_tree_and_an_order_together_are_refused(adata, tree):
+    with pytest.raises(ValueError, match='ordered one way'):
+        scgenome.pl.CellGrid(adata, cell_order_fields=['cell_order'], tree=tree)
+
+
+def test_add_tree_refuses_a_tree_that_is_not_the_row_order(adata, tree):
+    """ Drawing it would imply groupings that are not there """
+    grid = scgenome.pl.CellGrid(adata, cell_order=list(adata.obs.index)[::-1])
+
+    with pytest.raises(ValueError, match='align_tree_to_order'):
+        grid.add_tree(tree)
+
+
+def test_a_rotated_tree_is_accepted(adata, tree):
+    order = list(adata.obs.index)[::-1]
+    aligned = scgenome.tl.align_tree_to_order(tree, order, on_conflict='reorder')
+
+    g = (scgenome.pl.CellGrid(adata, cell_order=scgenome.tl.tree_leaf_order(aligned))
+         .add_tree(aligned)
+         .add_heatmap('state', palette='cn', name='A')
+         .plot())
+
+    assert list(g.cell_order) == scgenome.tl.tree_leaf_order(aligned)
+    plt.close('all')
 
 
 # --- the presets still return what they did ------------------------------

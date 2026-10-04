@@ -140,12 +140,25 @@ scgenome.pl.plot_cell_matrix(adata, layer_name='copy', cell_order=order, ax=axes
 `cell_order_fields=` remains as sugar for `resolve_cell_order(adata, fields=...)`.
 The two are mutually exclusive.
 
-A tree **constrains** the order rather than competing with it, so sort fields
-are allowed alongside one and order cells *within* clades. An order is drawable
-against a tree iff every clade's leaves occupy a contiguous block of rows; if
-not, `OrderConflict` is raised rather than rendering a plot that implies
-groupings which do not exist. Pass `on_conflict='reorder'` to let the tree drive
-row order, with the fields tie-breaking within clades.
+A tree **is** an order, so plotting functions take a tree or a cell order,
+never both. Making a tree agree with some other ordering is an explicit step:
+
+```python
+order = scgenome.tl.resolve_cell_order(adata, fields=['quality'])
+tree = scgenome.tl.align_tree_to_order(tree, order)   # rotated copy
+```
+
+`align_tree_to_order` rotates internal nodes, which never changes the topology
+or a branch length, so it picks among the orders the tree already admits. An
+order is realizable iff every clade's leaves occupy a contiguous block of rows;
+if not it raises `OrderConflict` rather than returning a tree that would imply
+groupings which do not exist. Pass `on_conflict='reorder'` to get the closest
+tree-realizable order instead, with the requested order tie-breaking within
+clades.
+
+The dendrogram panel keeps the same contiguity check, since there is no
+pre-rotated linkage to hand it, but it has no reconciliation mode: it either
+draws or tells you the order would cross its brackets.
 
 `tl.sort_cells` keeps the linkage in `uns['cell_order'][column]`, so the
 dendrogram behind an ordering can be drawn without reclustering.

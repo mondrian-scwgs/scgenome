@@ -93,17 +93,20 @@ def test_resolve_bin_order_rejects_unknown_chromosome(adata):
 # --- a tree constrains the order, it does not compete with it ------------
 
 
-def test_tree_alone_gives_leaf_order(adata, tree):
-    assert list(scgenome.tl.resolve_cell_order(adata, tree=tree)) == ['c0', 'c1', 'c2', 'c3']
+def test_tree_leaf_order_is_the_order_a_tree_implies(adata, tree):
+    assert scgenome.tl.tree_leaf_order(tree) == ['c0', 'c1', 'c2', 'c3']
 
 
-def test_compatible_fields_and_tree_are_allowed(adata, tree):
-    """ Sorting within clades used to be refused outright
+def test_reconciling_a_tree_with_an_order_is_explicit(adata, tree):
+    """ A tree and sort fields are reconciled by rotating the tree, by hand
+
+    Plotting takes a tree or an order, never both, so this is the only way the
+    two ever meet, and it is always something the caller asked for.
     """
-    # group puts (c2, c3) first, rank reverses within each clade
-    order = scgenome.tl.resolve_cell_order(adata, fields=['group', 'rank'], tree=tree)
+    order = scgenome.tl.resolve_cell_order(adata, fields=['group', 'rank'])
+    aligned = scgenome.tl.align_tree_to_order(tree, order)
 
-    assert list(order) == ['c3', 'c2', 'c1', 'c0']
+    assert scgenome.tl.tree_leaf_order(aligned) == list(order)
 
 
 def test_incompatible_order_raises_rather_than_drawing_a_lie(adata, tree):
@@ -145,23 +148,6 @@ def test_a_non_leaf_cell_splitting_a_clade_is_a_conflict(tree):
     """
     with pytest.raises(OrderConflict):
         scgenome.tl.align_tree_to_order(tree, ['c0', 'extra', 'c1', 'c2', 'c3'])
-
-
-def test_tree_leaves_missing_from_adata_are_reported(adata, tree):
-    with pytest.raises(ValueError, match='tree leaves are not cells in adata'):
-        scgenome.tl.resolve_cell_order(adata[:2], tree=tree)
-
-
-def test_cells_missing_from_tree_need_fields_to_order_them(adata, tree):
-    pruned = scgenome.tl.prune_leaves(tree, lambda c: c.name == 'c3')
-
-    with pytest.raises(ValueError, match='not leaves of the tree'):
-        scgenome.tl.resolve_cell_order(adata, tree=pruned)
-
-
-def test_tangle_names_what_to_use_instead(adata, tree):
-    with pytest.raises(NotImplementedError, match='dendrogram panel'):
-        scgenome.tl.resolve_cell_order(adata, tree=tree, on_conflict='tangle')
 
 
 def test_deep_ladder_tree_does_not_exhaust_the_stack():
@@ -240,18 +226,18 @@ def test_retained_linkage_round_trips_to_a_tree_and_catches_the_documented_idiom
     assert tree.count_terminals() == adata.shape[0]
 
     # The ordering the linkage produced is realizable, by construction
-    by_cell = scgenome.tl.resolve_cell_order(adata, fields=['cell_order'], tree=tree)
+    by_cell = scgenome.tl.resolve_cell_order(adata, fields=['cell_order'])
+    scgenome.tl.align_tree_to_order(tree, by_cell)
     assert list(by_cell) == list(adata.obs.sort_values('cell_order').index)
 
     # Grouping by cluster first splits clades, and must be refused
+    grouped = scgenome.tl.resolve_cell_order(adata, fields=['cluster_id', 'cell_order'])
     with pytest.raises(OrderConflict):
-        scgenome.tl.resolve_cell_order(
-            adata, fields=['cluster_id', 'cell_order'], tree=tree)
+        scgenome.tl.align_tree_to_order(tree, grouped)
 
-    # The escape hatch must yield something the tree can actually draw
-    rescued = scgenome.tl.resolve_cell_order(
-        adata, fields=['cluster_id', 'cell_order'], tree=tree, on_conflict='reorder')
-    scgenome.tl.align_tree_to_order(tree, rescued)
+    # The escape hatch must yield a tree that can actually be drawn
+    rescued = scgenome.tl.align_tree_to_order(tree, grouped, on_conflict='reorder')
+    scgenome.tl.align_tree_to_order(rescued, scgenome.tl.tree_leaf_order(rescued))
 
 
 # --- plotting takes an ordering instead of computing its own -------------
@@ -297,26 +283,32 @@ def test_tree_does_not_modify_the_caller_adata(adata, tree):
     plt.close('all')
 
 
-def test_tree_and_cell_order_fields_compose(adata, tree):
-    """ The old code refused this combination outright
-    """
+def test_a_tree_orders_the_rows_by_its_leaves(adata, tree):
     g = scgenome.pl.plot_cell_matrix_fig(
-        adata, layer_name='state', tree=tree,
-        cell_order_fields=['group', 'rank'], fig=plt.figure())
+        adata, layer_name='state', tree=tree, fig=plt.figure())
 
-    assert list(g['adata'].obs.index) == ['c3', 'c2', 'c1', 'c0']
+    assert list(g['adata'].obs.index) == scgenome.tl.tree_leaf_order(tree)
     plt.close('all')
 
 
-def test_conflicting_tree_and_fields_raise(adata, tree):
-    """ group alone splits both clades, since it pairs c1 with c2
+def test_a_tree_and_sort_fields_together_are_refused(adata, tree):
+    """ Reconciling them is align_tree_to_order, called by the user
     """
-    adata.obs['group'] = ['x', 'y', 'y', 'x']
-
-    with pytest.raises(OrderConflict):
+    with pytest.raises(ValueError, match='ordered one way'):
         scgenome.pl.plot_cell_matrix_fig(
             adata, layer_name='state', tree=tree,
             cell_order_fields=['group'], fig=plt.figure())
+    plt.close('all')
+
+
+def test_a_rotated_tree_is_how_fields_and_a_tree_are_combined(adata, tree):
+    order = scgenome.tl.resolve_cell_order(adata, fields=['group', 'rank'])
+    aligned = scgenome.tl.align_tree_to_order(tree, order)
+
+    g = scgenome.pl.plot_cell_matrix_fig(
+        adata, layer_name='state', tree=aligned, fig=plt.figure())
+
+    assert list(g['adata'].obs.index) == list(order)
     plt.close('all')
 
 
