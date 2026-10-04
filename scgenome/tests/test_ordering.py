@@ -245,11 +245,11 @@ def test_retained_linkage_round_trips_to_a_tree_and_catches_the_documented_idiom
 
 def test_cell_order_matches_cell_order_fields(adata):
     plt.figure()
-    by_fields = scgenome.pl.plot_cell_matrix(adata, cell_order_fields=['group', 'rank'])
+    by_fields = scgenome.pl.plot_heatmap(adata, cell_order_fields=['group', 'rank'])
 
     order = scgenome.tl.resolve_cell_order(adata, fields=['group', 'rank'])
     plt.figure()
-    by_order = scgenome.pl.plot_cell_matrix(adata, cell_order=order)
+    by_order = scgenome.pl.plot_heatmap(adata, cell_order=order)
 
     assert list(by_fields['adata'].obs.index) == list(by_order['adata'].obs.index)
     np.testing.assert_array_equal(
@@ -261,7 +261,7 @@ def test_cell_order_matches_cell_order_fields(adata):
 def test_cell_order_and_cell_order_fields_are_mutually_exclusive(adata):
     plt.figure()
     with pytest.raises(ValueError, match='cannot provide both'):
-        scgenome.pl.plot_cell_matrix(
+        scgenome.pl.plot_heatmap(
             adata, cell_order_fields=['group'], cell_order=list(adata.obs.index))
     plt.close('all')
 
@@ -269,7 +269,7 @@ def test_cell_order_and_cell_order_fields_are_mutually_exclusive(adata):
 def test_unknown_cells_in_cell_order_are_reported(adata):
     plt.figure()
     with pytest.raises(ValueError, match='not in adata'):
-        scgenome.pl.plot_cell_matrix(adata, cell_order=['c0', 'nope'])
+        scgenome.pl.plot_heatmap(adata, cell_order=['c0', 'nope'])
     plt.close('all')
 
 

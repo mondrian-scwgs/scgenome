@@ -78,21 +78,41 @@ Each has a `_fig` variant adding annotation bars and a legend.
 |----------|-----|--------|
 | `pl.plot_cell_tcn_matrix` | Integer total CN states (`layer_name='state'`) | CN palette |
 | `pl.plot_cell_ascn_matrix` | Allele specific states, derived from layers `A`/`B` | Allele state palette |
-| `pl.plot_cell_matrix` | Anything else, including continuous layers like `copy` | Continuous `cmap` |
+| `pl.plot_heatmap` | Anything else, including continuous layers like `copy` | Continuous `cmap` |
 
 Palettes map values to colors by equality, so colors never depend on which
 values happen to be present. Never use the CN palette on a continuous layer —
 it matches by equality and renders almost everything white;
 `plot_cell_tcn_matrix` warns if you try.
 
-`pl.plot_cell_cn_matrix`/`_fig` and the `raw=` argument are deprecated aliases
-kept for compatibility; use the table above instead.
+`pl.plot_cell_cn_matrix`/`_fig`, `pl.plot_cell_matrix` and the `raw=` argument
+are deprecated aliases kept for compatibility; use the table above instead.
+
+## Drawing primitives
+
+Each of these fills one axes and nothing else, with no figure created and no
+layout decided. They are ordinary plotting functions: `pl.CellGrid` arranges
+them, but none of them needs it.
+
+| Function | Draws |
+|----------|-------|
+| `pl.plot_heatmap` | a cell by bin matrix |
+| `pl.plot_obs_annotation` | one obs column as a bar down the side |
+| `pl.plot_var_annotation` | one var column as a bar along the top |
+| `pl.plot_tree` | a phylogeny, as given |
+| `pl.plot_dendrogram` | the linkage behind an ordering |
+
+Two conventions make them compose: rows are drawn in `cell_order` with row `i`
+at `y == i`, so one order shared between them lines their rows up; and each
+*describes* its legend as a `LegendSpec` instead of drawing it, so a caller can
+collect legends and drop duplicates. All return a `PanelResult`, which supports
+`result['ax']` as well as `result.ax`.
 
 ## Composing panels
 
 `pl.CellGrid` lays out several panels against one shared row order. It owns
 only two things: allocating axes and collecting legends. Everything drawn comes
-from `pl.panels.*`, each of which takes an `ax` and draws one thing.
+from the drawing primitives above.
 
 ```python
 g = (scgenome.pl.CellGrid(adata, cell_order_fields=['cell_order'], figsize=(14, 5))
@@ -134,7 +154,7 @@ guaranteed to line up:
 ```python
 order = scgenome.tl.resolve_cell_order(adata, fields=['cluster_id', 'cell_order'])
 scgenome.pl.plot_cell_tcn_matrix(adata, cell_order=order, ax=axes[0])
-scgenome.pl.plot_cell_matrix(adata, layer_name='copy', cell_order=order, ax=axes[1])
+scgenome.pl.plot_heatmap(adata, layer_name='copy', cell_order=order, ax=axes[1])
 ```
 
 `cell_order_fields=` remains as sugar for `resolve_cell_order(adata, fields=...)`.

@@ -22,7 +22,8 @@ metadata, all describing the same rows.
 
 `CellGrid` lays those out against one shared row order. It owns only two
 things, allocating axes and collecting legends; everything drawn comes from
-`scgenome.pl.panels`, each of which takes an `ax` and draws one thing.
+ordinary plotting functions, each of which fills one axes and none of which
+needs a grid.
 
 
 ```python
@@ -84,6 +85,20 @@ print(widths, '| equal:', widths[0] == widths[1])
 ```
 
 
+Legends are collected from the panels into a single strip rather than drawn by
+each one. Panels describing the *same* values contribute one legend between
+them, so two heatmaps of one palette would appear here once; these two draw
+different things, so both appear. `legend_title` overrides what a heatmap's
+legend is called, while `name` only addresses the panel.
+
+
+```python
+
+print(list(g.legends))
+
+```
+
+
 `plot` returns a `GridResult`. Panels are addressable by name, so a figure can
 be adjusted after the fact without rebuilding it.
 
@@ -112,40 +127,6 @@ g = (scgenome.pl.CellGrid(adata, cell_order_fields=['cell_order'], figsize=(12, 
      .add_var_annotation('gc', on='Total CN')
      .add_obs_annotation(['cluster_id', 'quality'])
      .plot())
-
-```
-
-
-## Comparing two samples
-
-A panel can carry its own `AnnData`. It is reindexed to the grid's row order
-and rows for cells it does not have are left blank, so two samples can be put
-beside each other without either one moving.
-
-
-```python
-
-samples = adata.obs['sample_id'].unique()[:2]
-first = adata[adata.obs['sample_id'] == samples[0]].copy()
-second = adata[adata.obs['sample_id'] == samples[1]].copy()
-
-g = (scgenome.pl.CellGrid(adata, cell_order_fields=['cell_order'], figsize=(12, 5))
-     .add_heatmap('state', adata=first, palette='cn', name=str(samples[0]))
-     .add_heatmap('state', adata=second, palette='cn', name=str(samples[1]))
-     .add_obs_annotation('sample_id')
-     .plot())
-
-```
-
-
-Both panels describe the same legend, so the grid draws it once rather than
-twice. `legend_title` overrides what a heatmap's legend is called; `name` only
-addresses the panel.
-
-
-```python
-
-print(list(g.legends))
 
 ```
 
@@ -255,15 +236,14 @@ except scgenome.tl.OrderConflict as error:
 
 ## Driving the panels yourself
 
-`CellGrid` is a convenience over `scgenome.pl.panels`, not a requirement. Each
-panel takes an axes and draws into it, so you can lay them out with plain
-matplotlib when you want a shape the grid does not offer. Pass the same order
-to each and the rows still agree.
+`CellGrid` is a convenience, not a requirement. `plot_heatmap`,
+`plot_dendrogram` and the rest are ordinary plotting functions that fill
+whatever axes you hand them, so you can lay them out with plain matplotlib when
+you want a shape the grid does not offer. Pass the same order to each and the
+rows still agree.
 
 
 ```python
-
-from scgenome.plotting import panels
 
 order = scgenome.tl.resolve_cell_order(adata, fields=['cell_order'])
 
@@ -271,24 +251,27 @@ fig, axes = plt.subplots(
     ncols=2, figsize=(12, 4), width_ratios=[0.3, 1],
     gridspec_kw=dict(wspace=0.02))
 
-panels.dendrogram(adata, axes[0], cell_order=order)
-panels.heatmap(adata, axes[1], layer='state', palette='cn', cell_order=order)
+scgenome.pl.plot_dendrogram(adata, ax=axes[0], cell_order=order)
+scgenome.pl.plot_heatmap(
+    adata, layer_name='state', ax=axes[1], palette='cn', cell_order=order)
 
 ```
 
 
-Panels describe their legend rather than drawing it, which is what lets a
-layout collect legends from several panels and drop duplicates. If you are
-driving the layout yourself, draw them where you like:
+Each describes its legend rather than drawing it, which is what lets a layout
+collect legends and drop duplicates. Driving the layout yourself, you draw them
+where you like. The result also supports `result['ax']` as well as `result.ax`,
+so it stands in for the dictionaries these functions used to return.
 
 
 ```python
 
-result = panels.heatmap(adata, plt.subplots(figsize=(8, 3))[1],
-                        layer='state', palette='cn')
+result = scgenome.pl.plot_heatmap(
+    adata, layer_name='state', ax=plt.subplots(figsize=(8, 3))[1], palette='cn')
 
 print(result.legend.kind, '|', result.legend.title,
       '|', len(result.legend.levels), 'levels')
+print(sorted(result.keys()))
 
 ```
 

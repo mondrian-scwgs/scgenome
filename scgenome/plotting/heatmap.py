@@ -18,7 +18,7 @@ import scgenome.refgenome
 from scgenome.tools.ordering import (
     align_tree_to_order, resolve_bin_order, resolve_cell_order, tree_leaf_order)
 from . import cn_colors
-from . import panels
+from . import elements
 from .grid import CellGrid
 
 
@@ -37,77 +37,21 @@ def plot_cell_matrix(
         rasterized=False):
     """ Plot a matrix of per cell values across the genome
 
-    Makes no assumption about what the values mean. Values are colored with a
-    continuous colormap unless a discrete `palette` is given. For total copy
-    number or allele specific states, prefer `plot_cell_tcn_matrix` or
-    `plot_cell_ascn_matrix`, which select the matching palette for you.
-
-    Parameters
-    ----------
-    adata : AnnData
-        per cell data with var describing genomic bins
-    layer_name : str, optional
-        layer with values to plot, None for X, by default None
-    cell_order_fields : list, optional
-        columns of obs on which to sort cells, by default None
-    cell_order : pandas.Index, optional
-        explicit cell ids in plot order, from `scgenome.tl.resolve_cell_order`.
-        Mutually exclusive with cell_order_fields. Pass one order to several
-        panels so their rows are guaranteed to line up.
-    ax : matplotlib.axes.Axes, optional
-        existing axis to plot into, by default None
-    vmin, vmax : float, optional
-        vmin and vmax define the data range that the colormap covers, see `matplotlib.pyplot.imshow`.
-        Applies to `cmap` only, discrete palettes map values to colors directly.
-    cmap : str or matplotlib.colors.Colormap, optional
-        continuous colormap to use, by default 'viridis'. Mutually exclusive
-        with palette.
-    palette : str or dict, optional
-        discrete palette to use, 'cn' for total copy number states,
-        'allele_state' for allele specific states, or a dict mapping value to
-        color. Mutually exclusive with cmap. Unlike cmap, a palette maps values
-        to colors directly, so colors do not depend on the range of values
-        present.
-    show_cell_ids : bool, optional
-        show cell ids on heatmap axis, by default False
-    style : str, optional
-        style for spines and chromosome dividing lines and other plot elements,
-        by default 'black'
-    rasterized : bool, optional
-        rasterize the plot, by default False
-
-    Returns
-    -------
-    dict
-        Dictionary of plot and data elements
-
-    Examples
-    -------
-
-    .. plot::
-        :context: close-figs
-
-        import scgenome
-        adata = scgenome.datasets.OV2295_HMMCopy_reduced()
-        scgenome.pl.plot_cell_matrix(adata, layer_name='copy', vmin=0, vmax=4)
-
+    .. deprecated::
+        Renamed to `scgenome.pl.plot_heatmap`, since the rows are not always
+        cells and the plot is a heatmap either way. The result still supports
+        `result['ax']` as well as `result.ax`.
     """
+    warnings.warn(
+        'plot_cell_matrix is deprecated, use plot_heatmap',
+        DeprecationWarning, stacklevel=2)
 
-    if ax is None:
-        ax = plt.gca()
-
-    if cell_order is not None and len(cell_order_fields) > 0:
-        raise ValueError(
-            'cannot provide both cell_order and cell_order_fields, '
-            'cell_order_fields is sugar for resolve_cell_order(adata, fields=...)')
-
-    if cell_order is None:
-        cell_order = resolve_cell_order(adata, fields=cell_order_fields)
-
-    drawn = panels.heatmap(
-        adata, ax,
-        layer=layer_name,
+    return elements.plot_heatmap(
+        adata,
+        layer_name=layer_name,
+        ax=ax,
         cell_order=cell_order,
+        cell_order_fields=cell_order_fields,
         palette=palette,
         cmap=cmap,
         vmin=vmin,
@@ -115,13 +59,6 @@ def plot_cell_matrix(
         show_cell_ids=show_cell_ids,
         style=style,
         rasterized=rasterized)
-
-    return {
-        'ax': drawn.ax,
-        'im': drawn.im,
-        'adata': drawn.extras['adata'],
-        'palette_info': drawn.extras['palette_info'],
-    }
 
 
 def map_catagorigal_colors(values, cmap=None):
@@ -134,7 +71,7 @@ def map_catagorigal_colors(values, cmap=None):
         'map_catagorigal_colors is deprecated, use map_categorical_colors',
         DeprecationWarning, stacklevel=2)
 
-    return panels.map_categorical_colors(values, cmap=cmap)
+    return elements.map_categorical_colors(values, cmap=cmap)
 
 
 # Adapted from: https://github.com/bernatgel/karyoploteR/blob/master/R/color.R
@@ -347,7 +284,7 @@ def _warn_if_not_integer(adata, layer_name):
     warnings.warn(
         f'{name} holds non integer values, which the total copy number palette '
         f'maps by equality and will render almost entirely white. Use '
-        f'plot_cell_matrix for continuous values.',
+        f'plot_heatmap for continuous values.',
         UserWarning, stacklevel=3)
 
 
@@ -363,7 +300,7 @@ def plot_cell_tcn_matrix(adata: AnnData, layer_name='state', **kwargs):
     layer_name : str, optional
         layer with copy number states to plot, None for X, by default 'state'
     **kwargs : dict
-        additional arguments passed to `plot_cell_matrix`
+        additional arguments passed to `scgenome.pl.plot_heatmap`
 
     Returns
     -------
@@ -383,8 +320,7 @@ def plot_cell_tcn_matrix(adata: AnnData, layer_name='state', **kwargs):
     """
     _warn_if_not_integer(adata, layer_name)
 
-    return plot_cell_matrix(
-        adata, layer_name=layer_name, palette='cn', **kwargs)
+    return elements.plot_heatmap(adata, layer_name=layer_name, palette='cn', **kwargs)
 
 
 def plot_cell_tcn_matrix_fig(adata: AnnData, layer_name='state', **kwargs):
@@ -453,7 +389,7 @@ def plot_cell_ascn_matrix(adata: AnnData, **kwargs):
     adata : AnnData
         copy number data with layers['A'] and layers['B']
     **kwargs : dict
-        additional arguments passed to `plot_cell_matrix`
+        additional arguments passed to `scgenome.pl.plot_heatmap`
 
     Returns
     -------
@@ -472,7 +408,7 @@ def plot_cell_ascn_matrix(adata: AnnData, **kwargs):
         scgenome.pl.plot_cell_ascn_matrix(adata, cell_order_fields=['cell_order'])
 
     """
-    return plot_cell_matrix(
+    return elements.plot_heatmap(
         _with_allele_state_layer(adata),
         layer_name='allele_state', palette='allele_state', **kwargs)
 
@@ -528,7 +464,7 @@ def _deprecated_cn_matrix_args(layer_name, cmap, palette, raw):
     """
     if raw is not None:
         warnings.warn(
-            'raw is deprecated, use plot_cell_matrix with a cmap for continuous values',
+            'raw is deprecated, use plot_heatmap with a cmap for continuous values',
             DeprecationWarning, stacklevel=3)
 
     if cmap is None and palette is None:
@@ -546,14 +482,14 @@ def plot_cell_cn_matrix(adata: AnnData, layer_name='state', cmap=None, palette=N
     .. deprecated::
         Use `plot_cell_tcn_matrix` for total copy number states,
         `plot_cell_ascn_matrix` for allele specific states, or
-        `plot_cell_matrix` for any other values.
+        `plot_heatmap` for any other values.
     """
     warnings.warn(
         'plot_cell_cn_matrix is deprecated, use plot_cell_tcn_matrix for total copy '
-        'number states or plot_cell_matrix for other values',
+        'number states or plot_heatmap for other values',
         DeprecationWarning, stacklevel=2)
 
-    return plot_cell_matrix(
+    return elements.plot_heatmap(
         adata, **_deprecated_cn_matrix_args(layer_name, cmap, palette, raw), **kwargs)
 
 

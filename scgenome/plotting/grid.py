@@ -2,7 +2,7 @@
 
 :class:`CellGrid` owns exactly two things: allocating axes and collecting
 legends. Everything drawn into those axes comes from
-:mod:`scgenome.plotting.panels`.
+the drawing primitives in :mod:`scgenome.pl`.
 
 Three properties follow from doing it in one place. The row order is resolved
 once and handed to every panel, so a tree, a dendrogram and any number of
@@ -20,7 +20,7 @@ import numpy as np
 import pandas as pd
 
 from scgenome.tools.ordering import resolve_cell_order, tree_leaf_order
-from . import panels as _panels
+from . import elements as _elements
 
 
 # Widths are in the same units the old figure layout used, so a grid holding
@@ -54,7 +54,7 @@ class GridResult:
     axes : dict
         panel axes keyed by panel name
     panels : dict
-        :class:`~scgenome.plotting.panels.PanelResult` keyed by panel name
+        :class:`~scgenome.pl.PanelResult` keyed by panel name
     legends : dict
         drawn legend elements keyed by legend title
     cell_order : pandas.Index
@@ -173,8 +173,9 @@ class CellGrid:
             layer to draw, None for X
         adata : AnnData, optional
             data for this panel, by default the grid's. Reindexed to the grid's
-            row order, with blank rows where a cell is absent, which is how two
-            samples are compared side by side.
+            row order, with blank rows for cells it does not hold, so a panel
+            over a subset or over a second pipeline's output stays in step with
+            the rest of the figure.
         name : str, optional
             panel name, used to address the axes and panel result
         legend_title : str, optional
@@ -184,7 +185,7 @@ class CellGrid:
         width : float, optional
             relative width of this column
         **kwargs :
-            passed to :func:`~scgenome.pl.panels.heatmap`
+            passed to :func:`~scgenome.pl.plot_heatmap`
 
         Returns
         -------
@@ -200,8 +201,8 @@ class CellGrid:
         kwargs.setdefault('on_missing', 'blank' if adata is not None else 'raise')
 
         def draw(ax, _source=source, _layer=layer, _title=legend_title, _kwargs=kwargs):
-            return _panels.heatmap(
-                _source, ax, layer=_layer, cell_order=self.cell_order,
+            return _elements.plot_heatmap(
+                _source, layer_name=_layer, ax=ax, cell_order=self.cell_order,
                 style=self.style, title=_title, **_kwargs)
 
         return self._add(_Panel('heatmap', name, width, draw))
@@ -231,8 +232,8 @@ class CellGrid:
             name = self._unique_name(f)
 
             def draw(ax, _f=f, _cmap=cmap.get(f)):
-                return _panels.obs_annotation(
-                    self.adata, ax, _f, cell_order=self.cell_order,
+                return _elements.plot_obs_annotation(
+                    self.adata, _f, ax=ax, cell_order=self.cell_order,
                     cmap=_cmap, style=self.style)
 
             self._add(_Panel('obs_annotation', name, width, draw))
@@ -313,7 +314,7 @@ class CellGrid:
         name = self._unique_name(name)
 
         def draw(ax, _tree=tree):
-            return _panels.tree(_tree, ax)
+            return _elements.plot_tree(_tree, ax=ax)
 
         return self._add(_Panel('tree', name, width, draw))
 
@@ -333,7 +334,7 @@ class CellGrid:
         width : float, optional
             relative width of this column
         **kwargs :
-            passed to :func:`~scgenome.pl.panels.dendrogram`
+            passed to :func:`~scgenome.pl.plot_dendrogram`
 
         Returns
         -------
@@ -343,8 +344,8 @@ class CellGrid:
         name = self._unique_name(name)
 
         def draw(ax, _key=key, _kwargs=kwargs):
-            return _panels.dendrogram(
-                self.adata, ax, cell_order=self.cell_order, key=_key, **_kwargs)
+            return _elements.plot_dendrogram(
+                self.adata, ax=ax, cell_order=self.cell_order, key=_key, **_kwargs)
 
         return self._add(_Panel('dendrogram', name, width, draw))
 
@@ -420,8 +421,8 @@ class CellGrid:
                 var_ax = axes[main_row - 2 - i, col]
                 var_ax.set_axis_on()
                 var_ax.set_xticks([])
-                var_drawn = _panels.var_annotation(
-                    self.adata, var_ax, var_field, cmap=var_cmap, style=self.style)
+                var_drawn = _elements.plot_var_annotation(
+                    self.adata, var_field, ax=var_ax, cmap=var_cmap, style=self.style)
 
                 name = f'{panel.name}:{var_field}'
                 result.axes[name] = var_ax
@@ -446,7 +447,7 @@ class CellGrid:
             ax.patch.set_alpha(0.0)
 
         for ax, (name, spec) in zip(legend_axes, unique):
-            result.legends[spec.title] = _panels.draw_legend(spec, ax)
+            result.legends[spec.title] = _elements.draw_legend(spec, ax)
 
         result.axes['_legends'] = legend_axes
 

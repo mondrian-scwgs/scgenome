@@ -155,19 +155,19 @@ Copy number heatmaps
    pl.plot_cell_matrix
    pl.plot_cell_matrix_fig
 
-Composing panels
-~~~~~~~~~~~~~~~~
+Drawing primitives and layout
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autosummary::
    :toctree: generated/
 
+   pl.plot_heatmap
+   pl.plot_obs_annotation
+   pl.plot_var_annotation
+   pl.plot_tree
+   pl.plot_dendrogram
    pl.CellGrid
    pl.GridResult
-   pl.panels.heatmap
-   pl.panels.obs_annotation
-   pl.panels.var_annotation
-   pl.panels.tree
-   pl.panels.dendrogram
    pl.LegendSpec
    pl.PanelResult
    pl.draw_legend

@@ -7,7 +7,7 @@ import seaborn as sns
 from matplotlib import gridspec
 
 from .grid import CellGrid
-from .panels import map_categorical_colors
+from .elements import map_categorical_colors
 
 
 def map_annotations_to_colors(annotation, cmap):

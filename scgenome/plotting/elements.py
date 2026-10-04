@@ -1,17 +1,16 @@
-""" Panels that draw one thing into one axes.
+""" Drawing primitives, each of which fills one axes.
 
-Each panel takes an axes, draws, and returns a :class:`PanelResult`. None of
-them create a figure, allocate axes, or decide where anything goes, so a caller
-can lay them out however it likes. :class:`scgenome.pl.CellGrid` is one such
-caller.
+These are ordinary plotting functions: give one an axes and it draws, with no
+figure created and no layout decided. :class:`scgenome.pl.CellGrid` arranges
+them into a composed figure, but nothing here depends on it, and any of them
+can be used on its own.
 
-Panels describe their legend rather than drawing it. Deferring the draw is what
-lets a layout collect legends from several panels, drop duplicates, and size a
-single legend strip before anything is rendered.
-
-All panels draw rows in the order given by ``cell_order``, with row ``i`` at
-``y == i``, matching the row coordinates of an imshow. Handing one order to
-several panels is therefore enough to guarantee their rows line up.
+What they share is a contract that makes them composable. Each draws rows in
+the order given by ``cell_order``, with row ``i`` at ``y == i``, matching the
+row coordinates of an imshow, so handing one order to several of them is enough
+to line their rows up. And each *describes* its legend as a :class:`LegendSpec`
+rather than drawing it, so a caller can collect legends, drop duplicates, and
+size one legend strip before anything is rendered.
 """
 
 import collections.abc
@@ -28,7 +27,7 @@ from matplotlib.patches import Patch
 
 import scgenome.refgenome
 from scgenome.tools.ordering import (
-    OrderConflict, linkage_order_conflict, resolve_bin_order)
+    OrderConflict, linkage_order_conflict, resolve_bin_order, resolve_cell_order)
 from . import cn_colors
 
 
@@ -87,13 +86,40 @@ class PanelResult:
     legend : scgenome.pl.LegendSpec, optional
         legend this panel needs, for the layout to draw
     extras : dict
-        panel specific detail, for instance the ordered adata a heatmap drew
+        per function detail, for instance the ordered adata a heatmap drew
+
+    Notes
+    -----
+    Supports ``result['ax']`` as well as ``result.ax``, and reaches into
+    ``extras``, so the dictionaries these functions used to return keep working.
     """
 
     ax: Axes
     im: Any = None
     legend: Optional[LegendSpec] = None
     extras: dict = field(default_factory=dict)
+
+    # Mapping access so the dicts these replaced keep working
+    _LEGACY = ('ax', 'im', 'adata', 'palette_info', 'legend', 'extras')
+
+    def __getitem__(self, key):
+        if key in ('ax', 'im', 'legend', 'extras'):
+            return getattr(self, key)
+        if key in self.extras:
+            return self.extras[key]
+        raise KeyError(key)
+
+    def __contains__(self, key):
+        return key in ('ax', 'im', 'legend', 'extras') or key in self.extras
+
+    def keys(self):
+        return [k for k in self._LEGACY if k in self]
+
+    def get(self, key, default=None):
+        try:
+            return self[key]
+        except KeyError:
+            return default
 
 
 def _ordered(adata, cell_order):
@@ -117,11 +143,12 @@ def _blank_rows(values, present, fill=np.nan):
     return full
 
 
-def heatmap(
+def plot_heatmap(
         adata,
-        ax,
-        layer=None,
+        layer_name=None,
+        ax=None,
         cell_order=None,
+        cell_order_fields=(),
         bin_order=None,
         palette=None,
         cmap=None,
@@ -139,12 +166,16 @@ def heatmap(
     ----------
     adata : AnnData
         per cell data with var describing genomic bins
-    ax : matplotlib.axes.Axes
-        axes to draw into
-    layer : str, optional
+    layer_name : str, optional
         layer to draw, None for X
+    ax : matplotlib.axes.Axes, optional
+        axes to draw into, by default the current axes
     cell_order : pandas.Index, optional
         cell ids in row order, by default the existing obs order
+    cell_order_fields : list, optional
+        obs columns to sort rows on, sugar for
+        ``resolve_cell_order(adata, fields=...)``. Mutually exclusive with
+        ``cell_order``.
     bin_order : pandas.Index, optional
         bin ids in column order, by default genomic order
     palette : str or dict, optional
@@ -180,6 +211,17 @@ def heatmap(
     if cmap is not None and palette is not None:
         raise ValueError('cannot provide both cmap and palette')
 
+    if ax is None:
+        ax = plt.gca()
+
+    if cell_order is not None and len(cell_order_fields) > 0:
+        raise ValueError(
+            'cannot provide both cell_order and cell_order_fields, '
+            'cell_order_fields is sugar for resolve_cell_order(adata, fields=...)')
+
+    if cell_order is None and len(cell_order_fields) > 0:
+        cell_order = resolve_cell_order(adata, fields=cell_order_fields)
+
     genome_info = scgenome.refgenome.get_genome_info(adata, genome=genome)
 
     if bin_order is None:
@@ -209,12 +251,14 @@ def heatmap(
                 f'empty rows instead.')
 
     X = np.asarray(
-        ordered.layers[layer] if layer is not None else ordered.X, dtype=float)
+        ordered.layers[layer_name] if layer_name is not None else ordered.X,
+        dtype=float)
 
     if not present.all():
         X = _blank_rows(X, present)
 
-    value_title = title if title is not None else (layer if layer is not None else 'value')
+    value_title = title if title is not None else (
+        layer_name if layer_name is not None else 'value')
 
     if palette is not None:
         # Discrete palettes map values to colors directly, bypassing any norm,
@@ -389,17 +433,18 @@ def _annotation(values, ax, title, horizontal, cmap, style):
     return PanelResult(ax=ax, im=im, legend=legend, extras=extras)
 
 
-def obs_annotation(adata, ax, field, cell_order=None, cmap=None, style='black'):
+def plot_obs_annotation(adata, field, ax=None, cell_order=None, cmap=None,
+                        style='black'):
     """ Draw a vertical bar of one obs column, one row per cell
 
     Parameters
     ----------
     adata : AnnData
         per cell data
-    ax : matplotlib.axes.Axes
-        axes to draw into
     field : str
         obs column to draw
+    ax : matplotlib.axes.Axes, optional
+        axes to draw into, by default the current axes
     cell_order : pandas.Index, optional
         cell ids in row order, by default the existing obs order
     cmap : str or dict, optional
@@ -412,6 +457,9 @@ def obs_annotation(adata, ax, field, cell_order=None, cmap=None, style='black'):
     -------
     PanelResult
     """
+    if ax is None:
+        ax = plt.gca()
+
     if field not in adata.obs.columns:
         raise ValueError(
             f'missing obs column {field!r}. '
@@ -424,17 +472,18 @@ def obs_annotation(adata, ax, field, cell_order=None, cmap=None, style='black'):
     return _annotation(values, ax, field, horizontal=False, cmap=cmap, style=style)
 
 
-def var_annotation(adata, ax, field, bin_order=None, cmap=None, style='black'):
+def plot_var_annotation(adata, field, ax=None, bin_order=None, cmap=None,
+                        style='black'):
     """ Draw a horizontal bar of one var column, one column per bin
 
     Parameters
     ----------
     adata : AnnData
         data with var describing genomic bins
-    ax : matplotlib.axes.Axes
-        axes to draw into
     field : str
         var column to draw
+    ax : matplotlib.axes.Axes, optional
+        axes to draw into, by default the current axes
     bin_order : pandas.Index, optional
         bin ids in column order, by default genomic order
     cmap : str or dict, optional
@@ -446,6 +495,9 @@ def var_annotation(adata, ax, field, bin_order=None, cmap=None, style='black'):
     -------
     PanelResult
     """
+    if ax is None:
+        ax = plt.gca()
+
     if field not in adata.var.columns:
         raise ValueError(
             f'missing var column {field!r}. '
@@ -459,7 +511,7 @@ def var_annotation(adata, ax, field, bin_order=None, cmap=None, style='black'):
     return _annotation(values, ax, field, horizontal=True, cmap=cmap, style=style)
 
 
-def tree(tree, ax, linewidth=0.5):
+def plot_tree(tree, ax=None, linewidth=0.5):
     """ Draw a phylogenetic tree beside heatmap rows
 
     Draws the tree exactly as given, top to bottom. Rows line up when the row
@@ -473,8 +525,8 @@ def tree(tree, ax, linewidth=0.5):
     ----------
     tree : Bio.Phylo.BaseTree.Tree
         tree whose leaf names are cell ids, not modified
-    ax : matplotlib.axes.Axes
-        axes to draw into
+    ax : matplotlib.axes.Axes, optional
+        axes to draw into, by default the current axes
     linewidth : float, optional
         width of tree branches, by default 0.5
 
@@ -482,6 +534,9 @@ def tree(tree, ax, linewidth=0.5):
     -------
     PanelResult
     """
+    if ax is None:
+        ax = plt.gca()
+
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
     ax.spines['bottom'].set_visible(True)
@@ -499,7 +554,7 @@ def tree(tree, ax, linewidth=0.5):
     return PanelResult(ax=ax, extras={'tree': tree})
 
 
-def dendrogram(adata, ax, cell_order=None, key='cell_order', color='black',
+def plot_dendrogram(adata, ax=None, cell_order=None, key='cell_order', color='black',
                linewidth=0.5, orientation='left'):
     """ Draw the hierarchical clustering behind an ordering
 
@@ -516,8 +571,8 @@ def dendrogram(adata, ax, cell_order=None, key='cell_order', color='black',
     ----------
     adata : AnnData
         data sorted by :func:`~scgenome.tl.sort_cells`
-    ax : matplotlib.axes.Axes
-        axes to draw into
+    ax : matplotlib.axes.Axes, optional
+        axes to draw into, by default the current axes
     cell_order : pandas.Index, optional
         cell ids in row order, by default the order the linkage produced
     key : str, optional
@@ -538,6 +593,9 @@ def dendrogram(adata, ax, cell_order=None, key='cell_order', color='black',
     -----
     adata.uns['cell_order'][key] : linkage, leaves and ids
     """
+    if ax is None:
+        ax = plt.gca()
+
     records = adata.uns.get('cell_order', {})
     if key not in records:
         raise ValueError(
@@ -597,15 +655,15 @@ def dendrogram(adata, ax, cell_order=None, key='cell_order', color='black',
     return PanelResult(ax=ax, extras={'linkage': linkage, 'ids': ids})
 
 
-def draw_legend(spec, ax, title=None):
+def draw_legend(spec, ax=None, title=None):
     """ Render a :class:`LegendSpec` into an axes
 
     Parameters
     ----------
     spec : LegendSpec
         legend to draw
-    ax : matplotlib.axes.Axes
-        axes to draw into
+    ax : matplotlib.axes.Axes, optional
+        axes to draw into, by default the current axes
     title : str, optional
         override the spec's title
 
@@ -614,6 +672,9 @@ def draw_legend(spec, ax, title=None):
     dict
         the drawn elements, keyed 'legend' for patches or 'cbar' for colorbars
     """
+    if ax is None:
+        ax = plt.gca()
+
     title = title if title is not None else spec.title
 
     if spec.kind == 'patches':
