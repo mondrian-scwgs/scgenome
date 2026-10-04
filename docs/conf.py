@@ -200,6 +200,11 @@ nitpick_ignore = [
     # duck-typed conventions, neither of which resolve as classes
     ('py:class', 'RefGenomeInfo'),
     ('py:class', 'RegionMapper'),
+    # PanelResult.legend is annotated Optional[LegendSpec]. The class is
+    # documented and links fine everywhere it is referenced in prose; only the
+    # signature rendered into the summary table resolves names with no
+    # currentmodule in scope, so the bare annotation has nothing to bind to.
+    ('py:class', 'LegendSpec'),
     ('py:class', 'Legend'),
     ('py:class', 'color'),
     ('py:class', 'function'),
