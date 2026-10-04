@@ -84,7 +84,7 @@ class PanelResult:
         axes drawn into
     im : matplotlib.image.AxesImage, optional
         image artist, for panels that draw one
-    legend : LegendSpec, optional
+    legend : scgenome.pl.LegendSpec, optional
         legend this panel needs, for the layout to draw
     extras : dict
         panel specific detail, for instance the ordered adata a heatmap drew
@@ -149,7 +149,7 @@ def heatmap(
         bin ids in column order, by default genomic order
     palette : str or dict, optional
         discrete palette, mutually exclusive with cmap
-    cmap : str or Colormap, optional
+    cmap : str or matplotlib.colors.Colormap, optional
         continuous colormap, mutually exclusive with palette
     vmin, vmax : float, optional
         data range the colormap covers
@@ -301,7 +301,7 @@ def map_categorical_colors(values, cmap=None):
     ----------
     values : numpy.ndarray
         values to map
-    cmap : str, Colormap or dict, optional
+    cmap : str, matplotlib.colors.Colormap or dict, optional
         colormap name or instance, or a mapping of level to color
 
     Returns
@@ -470,7 +470,7 @@ def tree(tree, ax, cell_order=None, linewidth=0.5, on_conflict='raise'):
         axes to draw into
     cell_order : pandas.Index, optional
         cell ids in row order. The tree is rotated to match, and
-        :class:`~scgenome.tl.OrderConflict` is raised if no rotation does.
+        ``OrderConflict`` is raised if no rotation does.
     linewidth : float, optional
         width of tree branches, by default 0.5
     on_conflict : str, optional
@@ -513,7 +513,7 @@ def dendrogram(adata, ax, cell_order=None, key='cell_order', color='black',
     Leaves are placed at the rows given by ``cell_order``, so the dendrogram
     lines up with a heatmap drawn in that order. If some merge's leaves are
     split by that order its brackets would cross, and
-    :class:`~scgenome.tl.OrderConflict` is raised instead.
+    ``OrderConflict`` is raised instead.
 
     Parameters
     ----------

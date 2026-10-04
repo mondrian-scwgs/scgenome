@@ -30,7 +30,7 @@ class OrderConflict(ValueError):
 
     Attributes
     ----------
-    clade : Bio.Phylo.BaseTree.Clade
+    clade : ``Bio.Phylo`` clade
         the clade whose leaves are split
     lo, hi : int
         first and last row occupied by the clade's leaves
@@ -68,7 +68,7 @@ def tree_leaf_order(tree):
 
     Returns
     -------
-    list of str
+    list
         leaf names top to bottom
     """
     order = []
@@ -124,7 +124,7 @@ def align_tree_to_order(tree, order, on_conflict='raise', fields=None):
     ----------
     tree : Bio.Phylo.BaseTree.Tree
         tree to align, not modified
-    order : iterable of str
+    order : pandas.Index or list
         cell ids in the requested row order
     on_conflict : str, optional
         'raise' to refuse an order the tree cannot reproduce, 'reorder' to
@@ -139,7 +139,7 @@ def align_tree_to_order(tree, order, on_conflict='raise', fields=None):
 
     Raises
     ------
-    OrderConflict
+    scgenome.tl.OrderConflict
         if ``on_conflict`` is 'raise' and some clade's leaves are split
 
     Notes
@@ -218,14 +218,14 @@ def resolve_cell_order(adata, fields=None, tree=None, on_conflict='raise'):
     pandas.Index
         cell ids in plot order
 
-    Raises
-    ------
-    OrderConflict
-        if ``tree`` and ``fields`` disagree and ``on_conflict`` is 'raise'
-
     Reads
     -----
     adata.obs[fields] : sort keys
+
+    Raises
+    ------
+    scgenome.tl.OrderConflict
+        if ``tree`` and ``fields`` disagree and ``on_conflict`` is 'raise'
 
     Examples
     --------
@@ -369,9 +369,9 @@ def linkage_order_conflict(linkage, ids, order):
     ----------
     linkage : numpy.ndarray
         scipy linkage matrix over ``len(ids)`` observations
-    ids : sequence of str
+    ids : numpy.ndarray or list
         labels the linkage rows refer to, in linkage observation order
-    order : iterable of str
+    order : pandas.Index or list
         cell ids in the requested row order
 
     Returns

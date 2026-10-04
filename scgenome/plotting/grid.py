@@ -45,7 +45,7 @@ class _Panel:
 
 @dataclass
 class GridResult:
-    """ What :meth:`CellGrid.plot` drew
+    """ What :meth:`CellGrid.plot <scgenome.pl.CellGrid.plot>` drew
 
     Parameters
     ----------
@@ -175,7 +175,7 @@ class CellGrid:
         width : float, optional
             relative width of this column
         **kwargs :
-            passed to :func:`~scgenome.plotting.panels.heatmap`
+            passed to :func:`~scgenome.pl.panels.heatmap`
 
         Returns
         -------
@@ -315,7 +315,7 @@ class CellGrid:
         width : float, optional
             relative width of this column
         **kwargs :
-            passed to :func:`~scgenome.plotting.panels.dendrogram`
+            passed to :func:`~scgenome.pl.panels.dendrogram`
 
         Returns
         -------
