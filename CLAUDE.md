@@ -176,6 +176,14 @@ groupings which do not exist. Pass `on_conflict='reorder'` to get the closest
 tree-realizable order instead, with the requested order tie-breaking within
 clades.
 
+To gather a discrete label instead of reproducing an exact order, use
+`tl.align_tree_to_groups(tree, adata.obs['cluster_id'])`. A tree read from a
+file has an arbitrary child order, so an annotation bar beside it speckles;
+rotating gathers each group into as few blocks as the topology allows, found
+exactly by dynamic programming for a modest number of groups. What speckle
+survives is where the tree and the label genuinely disagree, since rotation
+cannot unmix a clade.
+
 The dendrogram panel keeps the same contiguity check, since there is no
 pre-rotated linkage to hand it, but it has no reconciliation mode: it either
 draws or tells you the order would cross its brackets.
@@ -202,6 +210,7 @@ dendrogram behind an ordering can be drawn without reclustering.
 | `tl.resolve_cell_order` | obs[fields], tree | nothing, returns a `pd.Index` |
 | `tl.resolve_bin_order` | var['chr','start'] | nothing, returns a `pd.Index` |
 | `tl.align_tree_to_order` | tree | nothing, returns a rotated copy |
+| `tl.align_tree_to_groups` | tree, group labels | nothing, returns a rotated copy |
 | `tl.linkage_order_conflict` | linkage | nothing, returns the split merge or None |
 | `tl.detect_outliers` | layers[layer_name] | obs['is_outlier'], uns['outliers'] |
 | `tl.pca_loadings` | layers[layer] or X | obsm['X_pca'], varm['PCs'], uns['pca'] |

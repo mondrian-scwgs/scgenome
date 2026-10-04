@@ -613,7 +613,8 @@ def plot_dendrogram(adata, ax=None, cell_order=None, key='cell_order', color='bl
     conflict = linkage_order_conflict(linkage, ids, cell_order)
     if conflict is not None:
         lo, hi, n_leaves = conflict
-        raise OrderConflict(None, lo, hi, n_leaves)
+        raise OrderConflict(
+            None, lo, hi, n_leaves, remedy=OrderConflict.DENDROGRAM_REMEDY)
 
     positions = {cell_id: i for i, cell_id in enumerate(cell_order)}
     missing = [i for i in ids if i not in positions]

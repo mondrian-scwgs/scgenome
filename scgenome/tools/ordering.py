@@ -36,9 +36,22 @@ class OrderConflict(ValueError):
         first and last row occupied by the clade's leaves
     n_leaves : int
         number of leaves in the clade, less than ``hi - lo + 1``
+    remedy : str, optional
+        what to suggest in the message, since a tree and a dendrogram have
+        different ways out
     """
 
-    def __init__(self, clade, lo, hi, n_leaves, fields=None):
+    #: What to suggest when a tree cannot reproduce a requested order
+    TREE_REMEDY = (
+        "pass on_conflict='reorder' to let the tree drive the order instead, or "
+        'align_tree_to_groups to gather a label as far as the tree allows')
+
+    #: What to suggest when a linkage cannot be drawn against an order
+    DENDROGRAM_REMEDY = (
+        'order the rows by the clustering this linkage came from, for instance '
+        "resolve_cell_order(adata, fields=['cell_order']), or drop the dendrogram")
+
+    def __init__(self, clade, lo, hi, n_leaves, fields=None, remedy=None):
         self.clade = clade
         self.lo = lo
         self.hi = hi
@@ -46,12 +59,11 @@ class OrderConflict(ValueError):
         self.fields = fields
 
         under = f' under order {list(fields)}' if fields else ''
+        remedy = remedy if remedy is not None else self.TREE_REMEDY
+
         super().__init__(
-            f'clade of {n_leaves} cells spans rows {lo}-{hi}{under}, so it cannot be '
-            f'drawn as one contiguous block. Either:\n'
-            f"  on_conflict='reorder'  let the tree drive row order, with the requested "
-            f'order tie-breaking within clades\n'
-            f'  sort by a field that does not split clades, or drop the tree')
+            f'clade of {n_leaves} cells spans rows {lo}-{hi}{under}, so it cannot '
+            f'be drawn as one contiguous block: {remedy}.')
 
 
 def tree_leaf_order(tree):
@@ -195,6 +207,197 @@ def align_tree_to_order(tree, order, on_conflict='raise', fields=None):
     return tree
 
 
+
+#: Above this many groups the exact rotation gets expensive, so 'auto' falls back
+MAX_OPTIMAL_GROUPS = 12
+
+
+def _group_ranks(groups, group_order):
+    """ Map each group to an integer, in the order they should be laid out """
+    if group_order is None:
+        if isinstance(groups.dtype, pd.CategoricalDtype):
+            group_order = list(groups.cat.categories)
+        else:
+            group_order = sorted(groups.dropna().unique())
+
+    rank = {group: i for i, group in enumerate(group_order)}
+
+    unknown = sorted(set(groups.dropna().unique()) - set(rank))
+    if unknown:
+        raise ValueError(
+            f'groups {unknown} are not in group_order {list(group_order)}')
+
+    return rank
+
+
+def _rotate_greedy(tree, groups, rank):
+    """ Rotate by sorting cells on their group, cheap but not always the fewest blocks """
+    keys = np.array([rank.get(g, len(rank)) for g in groups])
+    order = groups.index[np.argsort(keys, kind='stable')]
+
+    return align_tree_to_order(tree, order, on_conflict='reorder')
+
+
+def _rotate_optimal(tree, labels, rank):
+    """ Rotate to the fewest blocks achievable, exactly, by dynamic programming
+
+    For each clade, tabulate the cheapest arrangement of its subtree for every
+    pair of (first label, last label) it can end up with. A clade's cost is its
+    children's costs plus one wherever two adjacent children meet on different
+    labels, so the table for a node follows from the tables of its children and
+    one pass up the tree solves the whole thing. A pass back down then fixes
+    each clade's child order to the arrangement that was chosen.
+    """
+    tree = _copy_tree(tree)
+
+    table = {}
+    stack = [(tree.root, False)]
+
+    while stack:
+        clade, expanded = stack.pop()
+
+        if not expanded:
+            stack.append((clade, True))
+            stack.extend((child, False) for child in clade.clades)
+            continue
+
+        if not clade.clades:
+            label = labels.get(clade.name)
+            if label is not None:
+                table[id(clade)] = {(label, label): (0, None)}
+            continue
+
+        kids = [c for c in clade.clades if id(c) in table]
+        unplaced = [c for c in clade.clades if id(c) not in table]
+
+        if not kids:
+            continue
+
+        if len(kids) == 1:
+            table[id(clade)] = {
+                state: (cost, ([kids[0]] + unplaced, state, None))
+                for state, (cost, _) in table[id(kids[0])].items()}
+            continue
+
+        # More than two children cannot be permuted exhaustively, so order the
+        # extras by group and solve the rest exactly
+        if len(kids) > 2:
+            kids.sort(key=lambda c: min(rank.get(labels.get(t.name), len(rank))
+                                        for t in c.get_terminals()))
+            head, tail = kids[0], kids[1:]
+            kids = [head, tail[0]]
+            unplaced = tail[1:] + unplaced
+
+        best = {}
+        for order in ([kids[0], kids[1]], [kids[1], kids[0]]):
+            left, right = table[id(order[0])], table[id(order[1])]
+            for (first, left_last), (left_cost, _) in left.items():
+                for (right_first, last), (right_cost, _) in right.items():
+                    cost = left_cost + right_cost + (0 if left_last == right_first else 1)
+                    key = (first, last)
+                    if key not in best or cost < best[key][0]:
+                        best[key] = (
+                            cost,
+                            (list(order) + unplaced,
+                             (first, left_last), (right_first, last)))
+
+        table[id(clade)] = best
+
+    if id(tree.root) not in table:
+        return tree
+
+    # Fewest blocks wins; group_order breaks ties, so it decides which way round
+    # the groups go whenever that costs nothing
+    root = table[id(tree.root)]
+    state = min(root, key=lambda k: (root[k][0], rank.get(k[0], len(rank))))
+
+    pending = [(tree.root, state)]
+    while pending:
+        clade, state = pending.pop()
+        payload = table[id(clade)][state][1]
+        if payload is None:
+            continue
+        order, left_state, right_state = payload
+        clade.clades = order
+        pending.append((order[0], left_state))
+        if right_state is not None:
+            pending.append((order[1], right_state))
+
+    return tree
+
+
+def align_tree_to_groups(tree, groups, group_order=None, method='auto'):
+    """ Rotate a tree so cells sharing a group sit together
+
+    A tree arrives with an arbitrary child order, since newick does not
+    canonicalise one, and that order decides where each cell lands. Annotate
+    such a tree with a per cell label and the label speckles: cells of one
+    group are scattered down the plot rather than forming blocks. Rotating the
+    tree to follow the label gathers them.
+
+    Parameters
+    ----------
+    tree : Bio.Phylo.BaseTree.Tree
+        tree whose leaf names are cell ids, not modified
+    groups : pandas.Series or dict
+        group label per cell id, for instance ``adata.obs['cluster_id']``
+    group_order : list, optional
+        order to place the groups in, by default the categories of a
+        categorical ``groups``, otherwise its sorted unique values. The optimal
+        method minimises blocks first and uses this only to break ties, so it
+        decides which way round the groups go but will not split one to do it.
+    method : str, optional
+        'optimal' for the fewest blocks achievable, found exactly; 'greedy' to
+        sort cells by group and rotate to follow, which is cheaper but can
+        leave a label more broken up than it needs to be; 'auto' for optimal up
+        to ``MAX_OPTIMAL_GROUPS`` groups and greedy beyond. By default 'auto'.
+
+    Returns
+    -------
+    Bio.Phylo.BaseTree.Tree
+        a rotated copy of the tree
+
+    Notes
+    -----
+    Rotation never changes the topology or a branch length, so this gathers a
+    label only as far as the tree's own structure allows. A clade that genuinely
+    mixes two groups cannot be unmixed by reordering it, and the speckle that
+    survives is telling you the tree and the label disagree. For the stricter
+    question of whether an order is reproducible at all, see
+    :func:`align_tree_to_order`.
+
+    The optimal method costs roughly the square of the group count per clade,
+    which is why it is not used for an unbounded number of groups. Clades with
+    more than two children have their extra children ordered greedily, since
+    the arrangements of a multifurcation cannot be enumerated.
+
+    Examples
+    --------
+
+    >>> import pandas as pd, io, Bio.Phylo, scgenome
+    >>> tree = Bio.Phylo.read(io.StringIO('((a:1,c:1):1,(b:1,d:1):1);'), 'newick')
+    >>> groups = pd.Series(['x', 'y', 'x', 'y'], index=['a', 'b', 'c', 'd'])
+    >>> gathered = scgenome.tl.align_tree_to_groups(tree, groups)
+    >>> [groups[leaf] for leaf in scgenome.tl.tree_leaf_order(gathered)]
+    ['x', 'x', 'y', 'y']
+
+    """
+    if method not in ('auto', 'optimal', 'greedy'):
+        raise ValueError(
+            f"unknown method {method!r}, expected 'auto', 'optimal' or 'greedy'")
+
+    groups = pd.Series(groups)
+    rank = _group_ranks(groups, group_order)
+
+    if method == 'auto':
+        method = 'optimal' if len(rank) <= MAX_OPTIMAL_GROUPS else 'greedy'
+
+    if method == 'greedy':
+        return _rotate_greedy(tree, groups, rank)
+
+    return _rotate_optimal(tree, groups.to_dict(), rank)
+
+
 def resolve_cell_order(adata, fields=None):
     """ Resolve the order in which cells are drawn
 
@@ -235,9 +438,10 @@ def resolve_cell_order(adata, fields=None):
     Hand one order to several panels so they are guaranteed to agree::
 
         order = scgenome.tl.resolve_cell_order(adata, fields=['cluster_id', 'cell_order'])
-        scgenome.pl.plot_heatmap(adata, axes[0], layer='state', palette='cn',
+        scgenome.pl.plot_heatmap(adata, layer_name='state', ax=axes[0],
+                                 palette='cn', cell_order=order)
+        scgenome.pl.plot_heatmap(adata, layer_name='copy', ax=axes[1],
                                  cell_order=order)
-        scgenome.pl.plot_heatmap(adata, axes[1], layer='copy', cell_order=order)
 
     """
     validate_adata(adata, caller='resolve_cell_order')

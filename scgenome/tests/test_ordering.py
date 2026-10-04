@@ -143,6 +143,106 @@ def test_align_tree_does_not_modify_the_caller_tree(tree):
     assert scgenome.tl.tree_leaf_order(tree) == ['c0', 'c1', 'c2', 'c3']
 
 
+def _blocks(groups, order):
+    labels = [groups[c] for c in order]
+    return 1 + sum(1 for a, b in zip(labels, labels[1:]) if a != b)
+
+
+def test_align_tree_to_groups_gathers_a_label(tree):
+    """ A tree read from a file has an arbitrary child order, which speckles a label
+    """
+    # (c0, c1) and (c2, c3) are the clades; this label pairs across them
+    groups = pd.Series(['x', 'y', 'y', 'x'], index=['c0', 'c1', 'c2', 'c3'])
+
+    gathered = scgenome.tl.align_tree_to_groups(tree, groups)
+    order = scgenome.tl.tree_leaf_order(gathered)
+
+    # the tree mixes the groups, so three blocks is the fewest a rotation can give
+    assert _blocks(groups, order) == 3
+    assert sorted(order) == ['c0', 'c1', 'c2', 'c3']
+
+
+def test_optimal_beats_greedy_when_they_differ(tree):
+    """ Sorting cells by group and following that order is not always fewest """
+    groups = pd.Series(['x', 'y', 'y', 'x'], index=['c0', 'c1', 'c2', 'c3'])
+
+    optimal = scgenome.tl.align_tree_to_groups(tree, groups, method='optimal')
+    greedy = scgenome.tl.align_tree_to_groups(tree, groups, method='greedy')
+
+    assert _blocks(groups, scgenome.tl.tree_leaf_order(optimal)) == 3
+    assert _blocks(groups, scgenome.tl.tree_leaf_order(greedy)) == 4
+
+
+def test_align_tree_to_groups_rejects_an_unknown_method(tree):
+    groups = pd.Series(['x', 'x', 'y', 'y'], index=['c0', 'c1', 'c2', 'c3'])
+
+    with pytest.raises(ValueError, match='unknown method'):
+        scgenome.tl.align_tree_to_groups(tree, groups, method='nope')
+
+
+def test_many_groups_fall_back_to_greedy(tree):
+    """ The exact rotation costs roughly the square of the group count """
+    groups = pd.Series(['a', 'b', 'c', 'd'], index=['c0', 'c1', 'c2', 'c3'])
+
+    from scgenome.tools import ordering
+    original = ordering.MAX_OPTIMAL_GROUPS
+    try:
+        ordering.MAX_OPTIMAL_GROUPS = 2
+        auto = scgenome.tl.align_tree_to_groups(tree, groups)
+    finally:
+        ordering.MAX_OPTIMAL_GROUPS = original
+
+    greedy = scgenome.tl.align_tree_to_groups(tree, groups, method='greedy')
+
+    assert scgenome.tl.tree_leaf_order(auto) == scgenome.tl.tree_leaf_order(greedy)
+
+
+def test_align_tree_to_groups_gathers_fully_when_the_tree_allows(tree):
+    """ A label that follows the clades comes out as one block each """
+    groups = pd.Series(['x', 'x', 'y', 'y'], index=['c0', 'c1', 'c2', 'c3'])
+
+    order = scgenome.tl.tree_leaf_order(
+        scgenome.tl.align_tree_to_groups(tree, groups))
+    labels = [groups[c] for c in order]
+
+    assert 1 + sum(1 for a, b in zip(labels, labels[1:]) if a != b) == 2
+
+
+def test_align_tree_to_groups_honours_a_group_order(tree):
+    groups = pd.Series(['x', 'x', 'y', 'y'], index=['c0', 'c1', 'c2', 'c3'])
+
+    order = scgenome.tl.tree_leaf_order(
+        scgenome.tl.align_tree_to_groups(tree, groups, group_order=['y', 'x']))
+
+    assert [groups[c] for c in order][0] == 'y'
+
+
+def test_align_tree_to_groups_uses_categorical_order(tree):
+    groups = pd.Series(
+        pd.Categorical(['x', 'x', 'y', 'y'], categories=['y', 'x'], ordered=True),
+        index=['c0', 'c1', 'c2', 'c3'])
+
+    order = scgenome.tl.tree_leaf_order(
+        scgenome.tl.align_tree_to_groups(tree, groups))
+
+    assert groups[order[0]] == 'y'
+
+
+def test_align_tree_to_groups_reports_an_unknown_group(tree):
+    groups = pd.Series(['x', 'x', 'y', 'y'], index=['c0', 'c1', 'c2', 'c3'])
+
+    with pytest.raises(ValueError, match='not in group_order'):
+        scgenome.tl.align_tree_to_groups(tree, groups, group_order=['x'])
+
+
+def test_align_tree_to_groups_does_not_modify_the_caller_tree(tree):
+    groups = pd.Series(['y', 'y', 'x', 'x'], index=['c0', 'c1', 'c2', 'c3'])
+
+    scgenome.tl.align_tree_to_groups(tree, groups)
+
+    assert scgenome.tl.tree_leaf_order(tree) == ['c0', 'c1', 'c2', 'c3']
+
+
 def test_a_non_leaf_cell_splitting_a_clade_is_a_conflict(tree):
     """ Cells absent from the tree are caught by the same contiguity test
     """

@@ -70,6 +70,7 @@ Ordering
    tl.resolve_cell_order
    tl.resolve_bin_order
    tl.align_tree_to_order
+   tl.align_tree_to_groups
    tl.tree_leaf_order
    tl.linkage_order_conflict
    tl.OrderConflict

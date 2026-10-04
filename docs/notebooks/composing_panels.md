@@ -193,7 +193,7 @@ grouped = scgenome.tl.resolve_cell_order(adata, fields=['cluster_id', 'cell_orde
 try:
     scgenome.tl.align_tree_to_order(tree, grouped)
 except scgenome.tl.OrderConflict as error:
-    print(str(error).splitlines()[0])
+    print(error)
 
 ```
 
@@ -218,7 +218,7 @@ g = (scgenome.pl.CellGrid(adata, tree=rescued, figsize=(12, 5))
 
 The dendrogram panel applies the same contiguity rule, since there is no
 pre-rotated linkage to hand it. It has no reconciliation mode: it draws, or it
-tells you the order would cross its brackets.
+tells you the order would cross its brackets, and says what to do instead.
 
 
 ```python
@@ -229,7 +229,120 @@ try:
      .add_heatmap('state', palette='cn')
      .plot())
 except scgenome.tl.OrderConflict as error:
-    print(str(error).splitlines()[0])
+    print(error)
+finally:
+    plt.close('all')
+
+```
+
+
+## Rotating a tree to match a label
+
+A tree arrives with an arbitrary child order. Newick does not canonicalise one,
+and swapping any node's children leaves the topology and every branch length
+untouched, so a tree that is correct can still be drawn in an order that makes
+a per cell label look like noise.
+
+This is easiest to see with a label the tree broadly agrees with but was not
+built from. Here the tree is complete linkage on copy number and the groups
+come from a ward clustering of the same cells, which is the ordinary situation
+of having clusters from one method and a tree from another.
+
+
+```python
+
+import io
+import random
+import Bio.Phylo
+import numpy as np
+import scipy.cluster.hierarchy as sch
+
+import scgenome.preprocessing.transform
+
+signals = scgenome.datasets.OV081_Signals_reduced()
+signals = scgenome.tl.sort_cells(signals, layer_name='copy')
+
+record = signals.uns['cell_order']['cell_order']
+ids = list(record['ids'])
+
+
+def to_newick(node):
+    if node.is_leaf():
+        return f'{ids[node.id]}:{node.dist:.4f}'
+    return f'({to_newick(node.left)},{to_newick(node.right)}):{node.dist:.4f}'
+
+
+phylo = Bio.Phylo.read(
+    io.StringIO(to_newick(sch.to_tree(record['linkage'])) + ';'), 'newick')
+
+# a second clustering of the same cells, standing in for groups you already have
+values = scgenome.preprocessing.transform.fill_missing(np.array(signals.layers['copy']))
+signals.obs['group'] = [
+    str(g) for g in sch.fcluster(sch.linkage(values, method='ward'), 6, criterion='maxclust')]
+
+```
+
+
+Shuffling the children simulates a tree as read from a file, where the child
+order carries no meaning:
+
+
+```python
+
+def shuffle_children(tree, seed):
+    tree = scgenome.tl.align_tree_to_order(tree, scgenome.tl.tree_leaf_order(tree))
+    rng = random.Random(seed)
+    stack = [tree.root]
+    while stack:
+        clade = stack.pop()
+        rng.shuffle(clade.clades)
+        stack.extend(clade.clades)
+    return tree
+
+
+as_read = shuffle_children(phylo, 3)
+gathered = scgenome.tl.align_tree_to_groups(as_read, signals.obs['group'])
+
+```
+
+
+Drawn side by side, with the group as an annotation bar, the difference is the
+whole point. Same tree, same topology, same branch lengths; only the order of
+each node's children differs.
+
+
+```python
+
+def blocks(order):
+    labels = signals.obs['group'].reindex(order).tolist()
+    return 1 + sum(1 for a, b in zip(labels, labels[1:]) if a != b)
+
+
+fig, axes = plt.subplots(
+    ncols=4, figsize=(11, 5), width_ratios=[0.5, 0.08, 0.5, 0.08],
+    gridspec_kw=dict(wspace=0.05))
+
+for i, (tree_, title) in enumerate([(as_read, 'as read'), (gathered, 'rotated to the groups')]):
+    order = scgenome.tl.tree_leaf_order(tree_)
+    scgenome.pl.plot_tree(tree_, ax=axes[2 * i])
+    scgenome.pl.plot_obs_annotation(signals, 'group', ax=axes[2 * i + 1], cell_order=order)
+    axes[2 * i].set_title(f'{title} — {blocks(order)} blocks', fontsize=9)
+
+```
+
+
+Rotation can only gather a label as far as the tree's own structure allows. A
+clade that genuinely mixes two groups cannot be unmixed by reordering it, which
+is why the count above does not fall to one block per group. The speckle that
+survives is information: it is telling you where the tree and the label
+disagree.
+
+
+```python
+
+print('groups           :', signals.obs['group'].nunique())
+print('as read          :', blocks(scgenome.tl.tree_leaf_order(as_read)), 'blocks')
+print('rotated to groups:', blocks(scgenome.tl.tree_leaf_order(gathered)), 'blocks')
 
 ```
 
