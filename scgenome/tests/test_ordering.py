@@ -421,3 +421,81 @@ def test_show_subsets_does_not_grow_the_callers_list():
 
     assert fields == ['cluster_id']
     plt.close('all')
+
+
+# --- reordering a dendrogram without converting it to a tree --------------
+
+
+def test_linkage_to_tree_round_trips_the_clustering():
+    adata = scgenome.datasets.OV2295_HMMCopy_reduced()
+    adata = scgenome.tl.sort_cells(adata, layer_name='copy')
+
+    tree = scgenome.tl.linkage_to_tree(adata)
+
+    assert tree.count_terminals() == adata.shape[0]
+    assert sorted(scgenome.tl.tree_leaf_order(tree)) == sorted(adata.obs.index)
+    # the stored leaf order is one the tree admits
+    scgenome.tl.align_tree_to_order(
+        tree, adata.obs.sort_values('cell_order').index)
+
+
+def test_linkage_to_tree_needs_a_stored_linkage():
+    adata = scgenome.datasets.OV2295_HMMCopy_reduced()
+
+    with pytest.raises(ValueError, match='no stored linkage'):
+        scgenome.tl.linkage_to_tree(adata)
+
+
+def test_order_cells_by_groups_gathers_without_breaking_the_dendrogram():
+    """ Reordering whole merges keeps the result drawable against the dendrogram """
+    adata = scgenome.datasets.OV081_Signals_reduced()
+    adata = scgenome.tl.sort_cells(adata, layer_name='copy')
+
+    record = adata.uns['cell_order']['cell_order']
+    as_sorted = adata.obs.sort_values('cell_order').index
+    gathered = scgenome.tl.order_cells_by_groups(adata, 'cluster_id')
+
+    def blocks(order):
+        labels = adata.obs['cluster_id'].astype(str).reindex(order).tolist()
+        return 1 + sum(1 for a, b in zip(labels, labels[1:]) if a != b)
+
+    assert sorted(gathered) == sorted(as_sorted)
+    assert blocks(gathered) < blocks(as_sorted)
+    assert scgenome.tl.linkage_order_conflict(
+        record['linkage'], record['ids'], gathered) is None
+
+
+def test_order_cells_by_groups_accepts_a_series():
+    adata = scgenome.datasets.OV2295_HMMCopy_reduced()
+    adata = scgenome.tl.sort_cells(adata, layer_name='copy')
+
+    by_name = scgenome.tl.order_cells_by_groups(adata, 'cluster_id')
+    by_series = scgenome.tl.order_cells_by_groups(adata, adata.obs['cluster_id'])
+
+    assert list(by_name) == list(by_series)
+
+
+def test_order_cells_by_groups_reports_a_missing_column():
+    adata = scgenome.datasets.OV2295_HMMCopy_reduced()
+    adata = scgenome.tl.sort_cells(adata, layer_name='copy')
+
+    with pytest.raises(ValueError, match='missing obs column'):
+        scgenome.tl.order_cells_by_groups(adata, 'nope')
+
+
+def test_order_cells_by_groups_needs_a_stored_linkage():
+    adata = scgenome.datasets.OV2295_HMMCopy_reduced()
+
+    with pytest.raises(ValueError, match='no stored linkage'):
+        scgenome.tl.order_cells_by_groups(adata, 'cluster_id')
+
+
+def test_order_cells_by_groups_is_drawable_by_the_dendrogram_panel():
+    adata = scgenome.datasets.OV2295_HMMCopy_reduced()
+    adata = scgenome.tl.sort_cells(adata, layer_name='copy')
+
+    order = scgenome.tl.order_cells_by_groups(adata, 'cluster_id')
+
+    # would raise OrderConflict if the order cut across a merge
+    scgenome.pl.plot_dendrogram(adata, ax=plt.subplots()[1], cell_order=order)
+    plt.close('all')

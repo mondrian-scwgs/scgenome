@@ -71,6 +71,8 @@ Ordering
    tl.resolve_bin_order
    tl.align_tree_to_order
    tl.align_tree_to_groups
+   tl.order_cells_by_groups
+   tl.linkage_to_tree
    tl.tree_leaf_order
    tl.linkage_order_conflict
    tl.OrderConflict

@@ -238,92 +238,160 @@ def _rotate_greedy(tree, groups, rank):
     return align_tree_to_order(tree, order, on_conflict='reorder')
 
 
-def _rotate_optimal(tree, labels, rank):
-    """ Rotate to the fewest blocks achievable, exactly, by dynamic programming
+def _gather_states(postorder, children_of, label_of, rank):
+    """ Cheapest arrangement of every subtree, for each pair of end labels
 
-    For each clade, tabulate the cheapest arrangement of its subtree for every
-    pair of (first label, last label) it can end up with. A clade's cost is its
+    The shared core of gathering a label under a fixed topology. For each node
+    it tabulates, for every (first label, last label) its subtree can end up
+    with, the fewest label changes needed to get there. A node's cost is its
     children's costs plus one wherever two adjacent children meet on different
-    labels, so the table for a node follows from the tables of its children and
-    one pass up the tree solves the whole thing. A pass back down then fixes
-    each clade's child order to the arrangement that was chosen.
+    labels, so one pass in post order solves the whole tree.
+
+    Parameters
+    ----------
+    postorder : iterable
+        node keys, children before parents
+    children_of : callable
+        node key to a list of child node keys, empty for a leaf
+    label_of : callable
+        leaf node key to its group label
+    rank : dict
+        group label to its position, used only to break ties
+
+    Returns
+    -------
+    tuple
+        ``(table, root_state)``, where table maps a node to
+        ``{(first, last): (cost, payload)}`` and payload is
+        ``(ordered_children, left_state, right_state)`` or None for a leaf
     """
-    tree = _copy_tree(tree)
-
     table = {}
-    stack = [(tree.root, False)]
+    root = None
 
-    while stack:
-        clade, expanded = stack.pop()
+    for node in postorder:
+        root = node
+        kids = [c for c in children_of(node) if c in table]
 
-        if not expanded:
-            stack.append((clade, True))
-            stack.extend((child, False) for child in clade.clades)
-            continue
-
-        if not clade.clades:
-            label = labels.get(clade.name)
+        if not children_of(node):
+            label = label_of(node)
             if label is not None:
-                table[id(clade)] = {(label, label): (0, None)}
+                table[node] = {(label, label): (0, None)}
             continue
 
-        kids = [c for c in clade.clades if id(c) in table]
-        unplaced = [c for c in clade.clades if id(c) not in table]
+        extras = [c for c in children_of(node) if c not in table]
 
         if not kids:
             continue
 
         if len(kids) == 1:
-            table[id(clade)] = {
-                state: (cost, ([kids[0]] + unplaced, state, None))
-                for state, (cost, _) in table[id(kids[0])].items()}
+            table[node] = {
+                state: (cost, ([kids[0]] + extras, state, None))
+                for state, (cost, _) in table[kids[0]].items()}
             continue
 
-        # More than two children cannot be permuted exhaustively, so order the
-        # extras by group and solve the rest exactly
+        # A multifurcation has too many arrangements to enumerate, so order the
+        # extra children by group and solve the remaining pair exactly
         if len(kids) > 2:
-            kids.sort(key=lambda c: min(rank.get(labels.get(t.name), len(rank))
-                                        for t in c.get_terminals()))
-            head, tail = kids[0], kids[1:]
-            kids = [head, tail[0]]
-            unplaced = tail[1:] + unplaced
+            kids.sort(key=lambda c: min(
+                (rank.get(first, len(rank)) for first, _ in table[c]), default=len(rank)))
+            extras = kids[2:] + extras
+            kids = kids[:2]
 
         best = {}
-        for order in ([kids[0], kids[1]], [kids[1], kids[0]]):
-            left, right = table[id(order[0])], table[id(order[1])]
-            for (first, left_last), (left_cost, _) in left.items():
-                for (right_first, last), (right_cost, _) in right.items():
+        for left, right in ((kids[0], kids[1]), (kids[1], kids[0])):
+            for (first, left_last), (left_cost, _) in table[left].items():
+                for (right_first, last), (right_cost, _) in table[right].items():
                     cost = left_cost + right_cost + (0 if left_last == right_first else 1)
                     key = (first, last)
                     if key not in best or cost < best[key][0]:
                         best[key] = (
                             cost,
-                            (list(order) + unplaced,
+                            ([left, right] + extras,
                              (first, left_last), (right_first, last)))
 
-        table[id(clade)] = best
+        table[node] = best
 
-    if id(tree.root) not in table:
+    if root is None or root not in table:
+        return table, None
+
+    # Fewest blocks wins; rank breaks ties, so group_order decides which way
+    # round the groups go whenever that costs nothing
+    states = table[root]
+    root_state = min(states, key=lambda k: (states[k][0], rank.get(k[0], len(rank))))
+
+    return table, root_state
+
+
+def _rotate_optimal(tree, labels, rank):
+    """ Rotate a tree's children to the arrangement with the fewest label blocks """
+    tree = _copy_tree(tree)
+
+    postorder = []
+    stack = [(tree.root, False)]
+    while stack:
+        clade, expanded = stack.pop()
+        if expanded:
+            postorder.append(clade)
+            continue
+        stack.append((clade, True))
+        stack.extend((child, False) for child in clade.clades)
+
+    by_key = {id(c): c for c in postorder}
+    table, root_state = _gather_states(
+        [id(c) for c in postorder],
+        lambda key: [id(c) for c in by_key[key].clades],
+        lambda key: labels.get(by_key[key].name),
+        rank)
+
+    if root_state is None:
         return tree
 
-    # Fewest blocks wins; group_order breaks ties, so it decides which way round
-    # the groups go whenever that costs nothing
-    root = table[id(tree.root)]
-    state = min(root, key=lambda k: (root[k][0], rank.get(k[0], len(rank))))
-
-    pending = [(tree.root, state)]
+    pending = [(id(tree.root), root_state)]
     while pending:
-        clade, state = pending.pop()
-        payload = table[id(clade)][state][1]
+        key, state = pending.pop()
+        payload = table[key][state][1]
         if payload is None:
             continue
         order, left_state, right_state = payload
-        clade.clades = order
+        by_key[key].clades = [by_key[c] for c in order]
         pending.append((order[0], left_state))
         if right_state is not None:
             pending.append((order[1], right_state))
 
     return tree
+
+
+def _linkage_order_optimal(linkage, ids, labels, rank):
+    """ Leaf order of a linkage with the fewest label blocks """
+    linkage = np.asarray(linkage)
+    n = len(ids)
+
+    children = {i: [] for i in range(n)}
+    for k, row in enumerate(linkage):
+        children[n + k] = [int(row[0]), int(row[1])]
+
+    table, root_state = _gather_states(
+        range(2 * n - 1),
+        lambda key: children[key],
+        lambda key: labels.get(ids[key]),
+        rank)
+
+    if root_state is None:
+        return list(ids)
+
+    order = []
+    stack = [(2 * n - 2, root_state)]
+    while stack:
+        key, state = stack.pop()
+        payload = table[key][state][1]
+        if payload is None:
+            order.append(ids[key])
+            continue
+        kids, left_state, right_state = payload
+        stack.append((kids[1], right_state))
+        stack.append((kids[0], left_state))
+
+    return order
 
 
 def align_tree_to_groups(tree, groups, group_order=None, method='auto'):
@@ -396,6 +464,158 @@ def align_tree_to_groups(tree, groups, group_order=None, method='auto'):
         return _rotate_greedy(tree, groups, rank)
 
     return _rotate_optimal(tree, groups.to_dict(), rank)
+
+
+def _stored_linkage(adata, key):
+    """ The linkage sort_cells recorded, and the ids its rows refer to """
+    records = adata.uns.get('cell_order', {})
+    if key not in records:
+        raise ValueError(
+            f'no stored linkage {key!r}, run scgenome.tl.sort_cells first. '
+            f'Available: {sorted(records.keys())}')
+
+    record = records[key]
+
+    return np.asarray(record['linkage']), list(np.asarray(record['ids']))
+
+
+def linkage_to_tree(adata, key='cell_order'):
+    """ Build a tree from the clustering behind an ordering
+
+    :func:`sort_cells` records the linkage it clustered with, which is a binary
+    tree in array form. This returns it as a ``Bio.Phylo`` tree, so the cells
+    can be drawn and manipulated as a phylogeny without reclustering.
+
+    Parameters
+    ----------
+    adata : AnnData
+        data sorted by :func:`sort_cells`, not modified
+    key : str, optional
+        which stored ordering to build from, by default 'cell_order'
+
+    Returns
+    -------
+    Bio.Phylo.BaseTree.Tree
+        tree whose leaf names are cell ids and whose branch lengths are the
+        merge heights of the clustering
+
+    Reads
+    -----
+    adata.uns['cell_order'][key] : linkage and ids
+
+    Examples
+    --------
+
+    >>> import scgenome
+    >>> adata = scgenome.datasets.OV2295_HMMCopy_reduced()
+    >>> adata = scgenome.tl.sort_cells(adata, layer_name='copy')
+    >>> tree = scgenome.tl.linkage_to_tree(adata)
+    >>> tree.count_terminals() == adata.shape[0]
+    True
+
+    """
+    import Bio.Phylo.BaseTree
+
+    linkage, ids = _stored_linkage(adata, key)
+    n = len(ids)
+
+    clades = [Bio.Phylo.BaseTree.Clade(name=cell_id) for cell_id in ids]
+
+    for row in linkage:
+        left, right, height = int(row[0]), int(row[1]), float(row[2])
+        clade = Bio.Phylo.BaseTree.Clade(clades=[clades[left], clades[right]])
+        for child, child_height in (
+                (clades[left], _clade_height(linkage, n, left)),
+                (clades[right], _clade_height(linkage, n, right))):
+            child.branch_length = height - child_height
+        clades.append(clade)
+
+    return Bio.Phylo.BaseTree.Tree(root=clades[-1])
+
+
+def _clade_height(linkage, n, node):
+    """ Merge height of a linkage node, zero for a leaf """
+    return 0. if node < n else float(linkage[node - n][2])
+
+
+def order_cells_by_groups(adata, groups, key='cell_order', group_order=None,
+                          method='auto'):
+    """ Order cells so a label is gathered, without breaking the dendrogram
+
+    A clustering admits many leaf orders: swapping the two children of any
+    merge leaves the clustering itself untouched. :func:`sort_cells` picks one
+    of them arbitrarily, so a label drawn beside the dendrogram tends to
+    speckle. This returns the member of that family which gathers ``groups``
+    into as few blocks as the clustering allows.
+
+    The result is always drawable against the dendrogram, since it only ever
+    reorders whole merges.
+
+    Parameters
+    ----------
+    adata : AnnData
+        data sorted by :func:`sort_cells`, not modified
+    groups : str, pandas.Series or dict
+        obs column name, or a group label per cell id
+    key : str, optional
+        which stored ordering to reorder, by default 'cell_order'
+    group_order : list, optional
+        order to place the groups in, used to break ties
+    method : str, optional
+        'optimal', 'greedy' or 'auto', see :func:`align_tree_to_groups`
+
+    Returns
+    -------
+    pandas.Index
+        cell ids in plot order
+
+    Reads
+    -----
+    adata.uns['cell_order'][key] : linkage and ids
+    adata.obs[groups] : group labels, when given as a column name
+
+    Examples
+    --------
+
+    >>> import scgenome
+    >>> adata = scgenome.datasets.OV2295_HMMCopy_reduced()
+    >>> adata = scgenome.tl.sort_cells(adata, layer_name='copy')
+    >>> order = scgenome.tl.order_cells_by_groups(adata, 'cluster_id')
+    >>> len(order) == adata.shape[0]
+    True
+
+    """
+    if method not in ('auto', 'optimal', 'greedy'):
+        raise ValueError(
+            f"unknown method {method!r}, expected 'auto', 'optimal' or 'greedy'")
+
+    if isinstance(groups, str):
+        if groups not in adata.obs.columns:
+            raise ValueError(
+                f'missing obs column {groups!r}. '
+                f'Available obs columns: {list(adata.obs.columns)}')
+        groups = adata.obs[groups]
+
+    groups = pd.Series(groups)
+    rank = _group_ranks(groups, group_order)
+
+    linkage, ids = _stored_linkage(adata, key)
+
+    missing = [i for i in ids if i not in groups.index]
+    if missing:
+        raise ValueError(
+            f'{len(missing)} cells in the stored linkage have no group, for '
+            f'instance {missing[:3]}')
+
+    if method == 'auto':
+        method = 'optimal' if len(rank) <= MAX_OPTIMAL_GROUPS else 'greedy'
+
+    if method == 'greedy':
+        tree = _rotate_greedy(linkage_to_tree(adata, key=key), groups, rank)
+        return pd.Index(tree_leaf_order(tree))
+
+    return pd.Index(
+        _linkage_order_optimal(linkage, ids, groups.to_dict(), rank))
 
 
 def resolve_cell_order(adata, fields=None):

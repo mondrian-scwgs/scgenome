@@ -176,13 +176,21 @@ groupings which do not exist. Pass `on_conflict='reorder'` to get the closest
 tree-realizable order instead, with the requested order tie-breaking within
 clades.
 
-To gather a discrete label instead of reproducing an exact order, use
-`tl.align_tree_to_groups(tree, adata.obs['cluster_id'])`. A tree read from a
-file has an arbitrary child order, so an annotation bar beside it speckles;
-rotating gathers each group into as few blocks as the topology allows, found
-exactly by dynamic programming for a modest number of groups. What speckle
-survives is where the tree and the label genuinely disagree, since rotation
-cannot unmix a clade.
+A clustering admits many leaf orders: swapping the two children of any merge
+leaves the clustering untouched, so a dendrogram over n cells can be drawn
+2**(n-1) ways and `sort_cells` picks one arbitrarily. To pick the one that
+gathers a label instead:
+
+```python
+order = scgenome.tl.order_cells_by_groups(adata, 'cluster_id')
+```
+
+It reorders whole merges only, so the result is always drawable against the
+dendrogram. `tl.align_tree_to_groups` does the same for a `Bio.Phylo` tree and
+returns a rotated copy; `tl.linkage_to_tree` builds such a tree from the stored
+linkage. Both find the fewest blocks exactly, by dynamic programming, for a
+modest number of groups. What speckle survives is where the clustering and the
+label genuinely disagree, since reordering cannot unmix a merge.
 
 The dendrogram panel keeps the same contiguity check, since there is no
 pre-rotated linkage to hand it, but it has no reconciliation mode: it either
@@ -211,6 +219,8 @@ dendrogram behind an ordering can be drawn without reclustering.
 | `tl.resolve_bin_order` | var['chr','start'] | nothing, returns a `pd.Index` |
 | `tl.align_tree_to_order` | tree | nothing, returns a rotated copy |
 | `tl.align_tree_to_groups` | tree, group labels | nothing, returns a rotated copy |
+| `tl.order_cells_by_groups` | uns['cell_order'], obs[groups] | nothing, returns a `pd.Index` |
+| `tl.linkage_to_tree` | uns['cell_order'] | nothing, returns a `Bio.Phylo` tree |
 | `tl.linkage_order_conflict` | linkage | nothing, returns the split merge or None |
 | `tl.detect_outliers` | layers[layer_name] | obs['is_outlier'], uns['outliers'] |
 | `tl.pca_loadings` | layers[layer] or X | obsm['X_pca'], varm['PCs'], uns['pca'] |

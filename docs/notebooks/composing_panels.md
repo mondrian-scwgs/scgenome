@@ -137,29 +137,14 @@ g = (scgenome.pl.CellGrid(adata, cell_order_fields=['cell_order'], figsize=(12, 
 `uns['cell_order']`, so it describes the clustering the ordering actually came
 from rather than a fresh one. `add_tree` draws a phylogeny instead.
 
-Handed a tree, a grid takes that tree's leaf order as its row order. The tree
-below is built from the stored linkage, which is also how you turn scgenome's
-clustering into a `Bio.Phylo` tree.
+Handed a tree, a grid takes that tree's leaf order as its row order.
+`tl.linkage_to_tree` turns the clustering `sort_cells` recorded into a
+`Bio.Phylo` tree, so you do not need an external phylogeny to try this.
 
 
 ```python
 
-import io
-import Bio.Phylo
-import scipy.cluster.hierarchy as sch
-
-record = adata.uns['cell_order']['cell_order']
-ids = list(record['ids'])
-
-
-def to_newick(node):
-    if node.is_leaf():
-        return f'{ids[node.id]}:{node.dist:.4f}'
-    return f'({to_newick(node.left)},{to_newick(node.right)}):{node.dist:.4f}'
-
-
-tree = Bio.Phylo.read(
-    io.StringIO(to_newick(sch.to_tree(record['linkage'])) + ';'), 'newick')
+tree = scgenome.tl.linkage_to_tree(adata)
 
 g = (scgenome.pl.CellGrid(adata, tree=tree, figsize=(12, 5))
      .add_tree()
@@ -236,115 +221,73 @@ finally:
 ```
 
 
-## Rotating a tree to match a label
+## Gathering a label in the ordering
 
-A tree arrives with an arbitrary child order. Newick does not canonicalise one,
-and swapping any node's children leaves the topology and every branch length
-untouched, so a tree that is correct can still be drawn in an order that makes
-a per cell label look like noise.
+A clustering admits many leaf orders: swapping the two children of any merge
+leaves the clustering itself untouched, so a dendrogram over n cells can be
+drawn 2**(n-1) ways. `sort_cells` picks one of them arbitrarily, which is why a
+label drawn beside it tends to speckle even though nothing is wrong.
 
-This is easiest to see with a label the tree broadly agrees with but was not
-built from. Here the tree is complete linkage on copy number and the groups
-come from a ward clustering of the same cells, which is the ordinary situation
-of having clusters from one method and a tree from another.
+`tl.order_cells_by_groups` picks the member of that family which gathers a
+label into as few blocks as the clustering allows. Because it only ever
+reorders whole merges, the dendrogram is unchanged and the result is always
+drawable against it.
 
 
 ```python
-
-import io
-import random
-import Bio.Phylo
-import numpy as np
-import scipy.cluster.hierarchy as sch
-
-import scgenome.preprocessing.transform
 
 signals = scgenome.datasets.OV081_Signals_reduced()
 signals = scgenome.tl.sort_cells(signals, layer_name='copy')
 
-record = signals.uns['cell_order']['cell_order']
-ids = list(record['ids'])
-
-
-def to_newick(node):
-    if node.is_leaf():
-        return f'{ids[node.id]}:{node.dist:.4f}'
-    return f'({to_newick(node.left)},{to_newick(node.right)}):{node.dist:.4f}'
-
-
-phylo = Bio.Phylo.read(
-    io.StringIO(to_newick(sch.to_tree(record['linkage'])) + ';'), 'newick')
-
-# a second clustering of the same cells, standing in for groups you already have
-values = scgenome.preprocessing.transform.fill_missing(np.array(signals.layers['copy']))
-signals.obs['group'] = [
-    str(g) for g in sch.fcluster(sch.linkage(values, method='ward'), 6, criterion='maxclust')]
+as_sorted = scgenome.tl.resolve_cell_order(signals, fields=['cell_order'])
+gathered = scgenome.tl.order_cells_by_groups(signals, 'cluster_id')
 
 ```
 
 
-Shuffling the children simulates a tree as read from a file, where the child
-order carries no meaning:
+Drawn side by side, the dendrogram is the same tree in both panels. Only the
+order of each merge's two children differs, and with it where each cluster
+lands.
 
 
 ```python
-
-def shuffle_children(tree, seed):
-    tree = scgenome.tl.align_tree_to_order(tree, scgenome.tl.tree_leaf_order(tree))
-    rng = random.Random(seed)
-    stack = [tree.root]
-    while stack:
-        clade = stack.pop()
-        rng.shuffle(clade.clades)
-        stack.extend(clade.clades)
-    return tree
-
-
-as_read = shuffle_children(phylo, 3)
-gathered = scgenome.tl.align_tree_to_groups(as_read, signals.obs['group'])
-
-```
-
-
-Drawn side by side, with the group as an annotation bar, the difference is the
-whole point. Same tree, same topology, same branch lengths; only the order of
-each node's children differs.
-
-
-```python
-
-def blocks(order):
-    labels = signals.obs['group'].reindex(order).tolist()
-    return 1 + sum(1 for a, b in zip(labels, labels[1:]) if a != b)
-
 
 fig, axes = plt.subplots(
     ncols=4, figsize=(11, 5), width_ratios=[0.5, 0.08, 0.5, 0.08],
     gridspec_kw=dict(wspace=0.05))
 
-for i, (tree_, title) in enumerate([(as_read, 'as read'), (gathered, 'rotated to the groups')]):
-    order = scgenome.tl.tree_leaf_order(tree_)
-    scgenome.pl.plot_tree(tree_, ax=axes[2 * i])
-    scgenome.pl.plot_obs_annotation(signals, 'group', ax=axes[2 * i + 1], cell_order=order)
-    axes[2 * i].set_title(f'{title} — {blocks(order)} blocks', fontsize=9)
+for i, (order, title) in enumerate([(as_sorted, 'as sorted'), (gathered, 'gathered')]):
+    scgenome.pl.plot_dendrogram(signals, ax=axes[2 * i], cell_order=order)
+    scgenome.pl.plot_obs_annotation(
+        signals, 'cluster_id', ax=axes[2 * i + 1], cell_order=order)
+    axes[2 * i].set_title(title, fontsize=9)
 
 ```
 
 
-Rotation can only gather a label as far as the tree's own structure allows. A
-clade that genuinely mixes two groups cannot be unmixed by reordering it, which
-is why the count above does not fall to one block per group. The speckle that
-survives is information: it is telling you where the tree and the label
+Reordering cannot unmix a merge that genuinely spans two clusters, so the
+label does not collapse to one block per cluster. What survives is information:
+it marks where the clustering that produced the dendrogram and the labels
 disagree.
 
 
 ```python
 
-print('groups           :', signals.obs['group'].nunique())
-print('as read          :', blocks(scgenome.tl.tree_leaf_order(as_read)), 'blocks')
-print('rotated to groups:', blocks(scgenome.tl.tree_leaf_order(gathered)), 'blocks')
+def blocks(order):
+    labels = signals.obs['cluster_id'].astype(str).reindex(order).tolist()
+    return 1 + sum(1 for a, b in zip(labels, labels[1:]) if a != b)
+
+
+print('clusters  :', signals.obs['cluster_id'].nunique())
+print('as sorted :', blocks(as_sorted), 'blocks')
+print('gathered  :', blocks(gathered), 'blocks')
 
 ```
+
+
+For a tree rather than a dendrogram, `tl.align_tree_to_groups` does the same
+thing to a `Bio.Phylo` tree and returns a rotated copy, which matters when the
+tree came from a phylogenetics tool rather than from `sort_cells`.
 
 
 ## Driving the panels yourself
