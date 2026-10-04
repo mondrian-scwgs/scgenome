@@ -78,15 +78,84 @@ Each has a `_fig` variant adding annotation bars and a legend.
 |----------|-----|--------|
 | `pl.plot_cell_tcn_matrix` | Integer total CN states (`layer_name='state'`) | CN palette |
 | `pl.plot_cell_ascn_matrix` | Allele specific states, derived from layers `A`/`B` | Allele state palette |
-| `pl.plot_cell_matrix` | Anything else, including continuous layers like `copy` | Continuous `cmap` |
+| `pl.plot_heatmap` | Anything else, including continuous layers like `copy` | Continuous `cmap` |
 
 Palettes map values to colors by equality, so colors never depend on which
 values happen to be present. Never use the CN palette on a continuous layer —
 it matches by equality and renders almost everything white;
 `plot_cell_tcn_matrix` warns if you try.
 
-`pl.plot_cell_cn_matrix`/`_fig` and the `raw=` argument are deprecated aliases
-kept for compatibility; use the table above instead.
+`pl.plot_cell_cn_matrix`/`_fig`, `pl.plot_cell_matrix` and the `raw=` argument
+are deprecated aliases kept for compatibility; use the table above instead.
+
+## Drawing primitives
+
+Each of these fills one axes and nothing else, with no figure created and no
+layout decided. They are ordinary plotting functions: `pl.CellGrid` arranges
+them, but none of them needs it.
+
+| Function | Draws |
+|----------|-------|
+| `pl.plot_heatmap` | a cell by bin matrix |
+| `pl.plot_obs_annotation` | one obs column as a bar down the side |
+| `pl.plot_var_annotation` | one var column as a bar along the top |
+| `pl.plot_tree` | a phylogeny, as given |
+| `pl.plot_dendrogram` | the linkage behind an ordering |
+
+Two conventions make them compose: rows are drawn in `cell_order` with row `i`
+at `y == i`, so one order shared between them lines their rows up; and each
+*describes* its legend as a `LegendSpec` instead of drawing it, so a caller can
+collect legends and drop duplicates. All return a `PanelResult`, which supports
+`result['ax']` as well as `result.ax`.
+
+## Composing panels
+
+`pl.CellGrid` lays out several panels against one shared row order. It owns
+only two things: allocating axes and collecting legends. Everything drawn comes
+from the drawing primitives above.
+
+`scgenome/plotting` is layered, and imports only ever point down:
+
+```
+cn_colors, results   palettes; what a drawing function returns
+heatmap, phylo       drawing primitives, one axes each
+grid                 CellGrid, which arranges them
+presets              the *_fig figures, built on CellGrid
+```
+
+Keep a new drawing function in `heatmap.py` or `phylo.py` by topic, and
+anything that builds a whole figure in `presets.py`. Putting a preset beside a
+primitive is what previously forced them apart into a module of their own.
+
+```python
+g = (scgenome.pl.CellGrid(adata, cell_order_fields=['cell_order'], figsize=(14, 5))
+     .add_dendrogram()
+     .add_heatmap('state', palette='cn', name='Total CN')
+     .add_heatmap('copy', cmap='viridis', vmin=0, vmax=4, name='Copy')
+     .add_obs_annotation(['cluster_id', 'sample_id'])
+     .add_var_annotation('gc')
+     .plot())
+
+g.fig, g.axes['Total CN'], g.panels['Copy'], g.legends, g.cell_order
+```
+
+- The row order is resolved once and handed to every panel, so a tree, a
+  dendrogram and any number of heatmaps are guaranteed to agree.
+- Panel widths are declared and summed once, so adding an annotation bar cannot
+  resize the matrices beside it.
+- Panels *describe* their legend (`LegendSpec`) rather than drawing it, so
+  panels showing the same values collapse to one legend. `legend_title=`
+  overrides a heatmap's, `name=` only addresses the panel.
+- `add_heatmap(adata=other)` draws a different AnnData against the same order,
+  blanking rows for cells it does not have — that is how two samples are
+  compared side by side.
+
+`add_dendrogram()` reads the linkage `tl.sort_cells` stored. It refuses an order
+that would cross its brackets, by the same contiguity rule trees use.
+
+`plot_cell_*_matrix_fig` are presets over `CellGrid` and return what they always
+did, plus a `'grid'` key. `pl.plot_tree_cn` is deprecated in favour of
+`CellGrid` with `.add_tree()`.
 
 ## Ordering
 
@@ -98,18 +167,47 @@ guaranteed to line up:
 ```python
 order = scgenome.tl.resolve_cell_order(adata, fields=['cluster_id', 'cell_order'])
 scgenome.pl.plot_cell_tcn_matrix(adata, cell_order=order, ax=axes[0])
-scgenome.pl.plot_cell_matrix(adata, layer_name='copy', cell_order=order, ax=axes[1])
+scgenome.pl.plot_heatmap(adata, layer_name='copy', cell_order=order, ax=axes[1])
 ```
 
 `cell_order_fields=` remains as sugar for `resolve_cell_order(adata, fields=...)`.
 The two are mutually exclusive.
 
-A tree **constrains** the order rather than competing with it, so sort fields
-are allowed alongside one and order cells *within* clades. An order is drawable
-against a tree iff every clade's leaves occupy a contiguous block of rows; if
-not, `OrderConflict` is raised rather than rendering a plot that implies
-groupings which do not exist. Pass `on_conflict='reorder'` to let the tree drive
-row order, with the fields tie-breaking within clades.
+A tree **is** an order, so plotting functions take a tree or a cell order,
+never both. Making a tree agree with some other ordering is an explicit step:
+
+```python
+order = scgenome.tl.resolve_cell_order(adata, fields=['quality'])
+tree = scgenome.tl.align_tree_to_order(tree, order)   # rotated copy
+```
+
+`align_tree_to_order` rotates internal nodes, which never changes the topology
+or a branch length, so it picks among the orders the tree already admits. An
+order is realizable iff every clade's leaves occupy a contiguous block of rows;
+if not it raises `OrderConflict` rather than returning a tree that would imply
+groupings which do not exist. Pass `on_conflict='reorder'` to get the closest
+tree-realizable order instead, with the requested order tie-breaking within
+clades.
+
+A clustering admits many leaf orders: swapping the two children of any merge
+leaves the clustering untouched, so a dendrogram over n cells can be drawn
+2**(n-1) ways and `sort_cells` picks one arbitrarily. To pick the one that
+gathers a label instead:
+
+```python
+order = scgenome.tl.order_cells_by_groups(adata, 'cluster_id')
+```
+
+It reorders whole merges only, so the result is always drawable against the
+dendrogram. `tl.align_tree_to_groups` does the same for a `Bio.Phylo` tree and
+returns a rotated copy; `tl.linkage_to_tree` builds such a tree from the stored
+linkage. Both find the fewest blocks exactly, by dynamic programming, for a
+modest number of groups. What speckle survives is where the clustering and the
+label genuinely disagree, since reordering cannot unmix a merge.
+
+The dendrogram panel keeps the same contiguity check, since there is no
+pre-rotated linkage to hand it, but it has no reconciliation mode: it either
+draws or tells you the order would cross its brackets.
 
 `tl.sort_cells` keeps the linkage in `uns['cell_order'][column]`, so the
 dendrogram behind an ordering can be drawn without reclustering.
@@ -133,6 +231,10 @@ dendrogram behind an ordering can be drawn without reclustering.
 | `tl.resolve_cell_order` | obs[fields], tree | nothing, returns a `pd.Index` |
 | `tl.resolve_bin_order` | var['chr','start'] | nothing, returns a `pd.Index` |
 | `tl.align_tree_to_order` | tree | nothing, returns a rotated copy |
+| `tl.align_tree_to_groups` | tree, group labels | nothing, returns a rotated copy |
+| `tl.order_cells_by_groups` | uns['cell_order'], obs[groups] | nothing, returns a `pd.Index` |
+| `tl.linkage_to_tree` | uns['cell_order'] | nothing, returns a `Bio.Phylo` tree |
+| `tl.linkage_order_conflict` | linkage | nothing, returns the split merge or None |
 | `tl.detect_outliers` | layers[layer_name] | obs['is_outlier'], uns['outliers'] |
 | `tl.pca_loadings` | layers[layer] or X | obsm['X_pca'], varm['PCs'], uns['pca'] |
 | `tl.compute_umap` | layers[layer_name] | obs['UMAP1','UMAP2'] |

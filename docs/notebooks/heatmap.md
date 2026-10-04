@@ -38,7 +38,7 @@ values mean rather than on any argument:
 |----------|-----|--------|
 | `plot_cell_tcn_matrix` | Integer total copy number states | Copy number palette |
 | `plot_cell_ascn_matrix` | Allele specific states | Allele state palette |
-| `plot_cell_matrix` | Anything else | Continuous colormap |
+| `plot_heatmap` | Anything else | Continuous colormap |
 
 All three draw rows as cells (or clones) and columns as bins of the genome,
 and all three take the same arguments beyond that.
@@ -58,14 +58,14 @@ scgenome.pl.cn_legend(plt.gca())
 Continuous values are a different job. The copy number palette matches states
 by equality, so handing it a continuous layer such as `copy` would leave
 almost every bin unmatched and render the plot blank. Use
-`scgenome.pl.plot_cell_matrix`, which colors with a continuous colormap and
+`scgenome.pl.plot_heatmap`, which colors with a continuous colormap and
 assumes nothing about what the values are. Use `layer_name=None` for a heatmap
 of `.X`, and `vmin` and `vmax` to anchor the color mapping.
 
 
 ```python
 
-g = scgenome.pl.plot_cell_matrix(adata, layer_name='copy', vmin=0, vmax=4)
+g = scgenome.pl.plot_heatmap(adata, layer_name='copy', vmin=0, vmax=4)
 
 ```
 

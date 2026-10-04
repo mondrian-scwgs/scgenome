@@ -1,5 +1,6 @@
 import numpy as np
 import collections.abc
+import matplotlib
 
 from matplotlib.patches import Patch
 from numpy import ndarray
@@ -204,14 +205,18 @@ def resolve_palette(palette):
     dict
         'mapper' is a callable from an array of values to an array of colors
         with shape values.shape + (3,), 'legend' is a callable taking an Axes
-        and a title and returning a Legend, and 'title' is the preferred
-        legend title for this palette or None to let the caller choose
+        and a title and returning a Legend, 'title' is the preferred legend
+        title for this palette or None to let the caller choose, and 'levels'
+        and 'colors' are the parallel lists a legend labels
     """
     if palette == 'cn':
+        states = list(color_reference.keys())
         return {
             'mapper': map_cn_colors,
             'legend': lambda ax, title: cn_legend(ax, title=title),
             'title': None,
+            'levels': states,
+            'colors': [color_reference[s] for s in states],
         }
 
     elif palette == 'allele_state':
@@ -219,6 +224,8 @@ def resolve_palette(palette):
             'mapper': map_allele_state_colors,
             'legend': lambda ax, title: allele_state_legend(ax, title=title),
             'title': 'AS CN state',
+            'levels': list(allele_state_names),
+            'colors': [allele_state_colors[n] for n in allele_state_names],
         }
 
     elif isinstance(palette, collections.abc.Mapping):
@@ -228,6 +235,8 @@ def resolve_palette(palette):
             'mapper': lambda X: map_discrete_colors(X, palette),
             'legend': lambda ax, title: _patch_legend(ax, levels, colors, title),
             'title': None,
+            'levels': levels,
+            'colors': colors,
         }
 
     raise ValueError(f"unknown palette {palette!r}, expected 'cn', 'allele_state' or a dict")
@@ -285,3 +294,57 @@ def add_allele_state_layer(adata):
     adata.layers['allele_state'] = allele_state
 
     return adata
+
+
+def map_categorical_colors(values, cmap=None):
+    """ Map categorical values to colors
+
+    Parameters
+    ----------
+    values : numpy.ndarray
+        values to map
+    cmap : str, matplotlib.colors.Colormap or dict, optional
+        colormap name or instance, or a mapping of level to color
+
+    Returns
+    -------
+    tuple
+        ``(level_colors, value_colors)``
+    """
+    level_colors = None
+    cmap_name = None
+    colormap = None
+    if isinstance(cmap, str):
+        cmap_name = cmap
+    elif isinstance(cmap, collections.abc.Mapping):
+        level_colors = dict(cmap)
+    elif isinstance(cmap, matplotlib.colors.Colormap):
+        colormap = cmap
+
+    levels = np.unique(values)
+    n_levels = len(levels)
+
+    if level_colors is None:
+        if cmap_name is None and colormap is None:
+            if n_levels <= 10:
+                cmap_name = 'tab10'
+            elif n_levels <= 20:
+                cmap_name = 'tab20'
+            else:
+                cmap_name = 'hsv'
+
+        if colormap is None:
+            colormap = matplotlib.colormaps[cmap_name]
+        level_colors = dict(zip(levels, colormap(np.linspace(0, 1, n_levels))))
+
+    else:
+        for level, color in list(level_colors.items()):
+            if isinstance(color, str) and color.startswith('#'):
+                level_colors[level] = np.array(
+                    list(cn_colors.hex_to_rgb(color)) + [255], dtype=float) / 255.
+
+    value_colors = np.zeros(values.shape + (4,))
+    for level, color in level_colors.items():
+        value_colors[values == level, :] = color
+
+    return level_colors, value_colors

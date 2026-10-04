@@ -93,17 +93,20 @@ def test_resolve_bin_order_rejects_unknown_chromosome(adata):
 # --- a tree constrains the order, it does not compete with it ------------
 
 
-def test_tree_alone_gives_leaf_order(adata, tree):
-    assert list(scgenome.tl.resolve_cell_order(adata, tree=tree)) == ['c0', 'c1', 'c2', 'c3']
+def test_tree_leaf_order_is_the_order_a_tree_implies(adata, tree):
+    assert scgenome.tl.tree_leaf_order(tree) == ['c0', 'c1', 'c2', 'c3']
 
 
-def test_compatible_fields_and_tree_are_allowed(adata, tree):
-    """ Sorting within clades used to be refused outright
+def test_reconciling_a_tree_with_an_order_is_explicit(adata, tree):
+    """ A tree and sort fields are reconciled by rotating the tree, by hand
+
+    Plotting takes a tree or an order, never both, so this is the only way the
+    two ever meet, and it is always something the caller asked for.
     """
-    # group puts (c2, c3) first, rank reverses within each clade
-    order = scgenome.tl.resolve_cell_order(adata, fields=['group', 'rank'], tree=tree)
+    order = scgenome.tl.resolve_cell_order(adata, fields=['group', 'rank'])
+    aligned = scgenome.tl.align_tree_to_order(tree, order)
 
-    assert list(order) == ['c3', 'c2', 'c1', 'c0']
+    assert scgenome.tl.tree_leaf_order(aligned) == list(order)
 
 
 def test_incompatible_order_raises_rather_than_drawing_a_lie(adata, tree):
@@ -140,28 +143,111 @@ def test_align_tree_does_not_modify_the_caller_tree(tree):
     assert scgenome.tl.tree_leaf_order(tree) == ['c0', 'c1', 'c2', 'c3']
 
 
+def _blocks(groups, order):
+    labels = [groups[c] for c in order]
+    return 1 + sum(1 for a, b in zip(labels, labels[1:]) if a != b)
+
+
+def test_align_tree_to_groups_gathers_a_label(tree):
+    """ A tree read from a file has an arbitrary child order, which speckles a label
+    """
+    # (c0, c1) and (c2, c3) are the clades; this label pairs across them
+    groups = pd.Series(['x', 'y', 'y', 'x'], index=['c0', 'c1', 'c2', 'c3'])
+
+    gathered = scgenome.tl.align_tree_to_groups(tree, groups)
+    order = scgenome.tl.tree_leaf_order(gathered)
+
+    # the tree mixes the groups, so three blocks is the fewest a rotation can give
+    assert _blocks(groups, order) == 3
+    assert sorted(order) == ['c0', 'c1', 'c2', 'c3']
+
+
+def test_optimal_beats_greedy_when_they_differ(tree):
+    """ Sorting cells by group and following that order is not always fewest """
+    groups = pd.Series(['x', 'y', 'y', 'x'], index=['c0', 'c1', 'c2', 'c3'])
+
+    optimal = scgenome.tl.align_tree_to_groups(tree, groups, method='optimal')
+    greedy = scgenome.tl.align_tree_to_groups(tree, groups, method='greedy')
+
+    assert _blocks(groups, scgenome.tl.tree_leaf_order(optimal)) == 3
+    assert _blocks(groups, scgenome.tl.tree_leaf_order(greedy)) == 4
+
+
+def test_align_tree_to_groups_rejects_an_unknown_method(tree):
+    groups = pd.Series(['x', 'x', 'y', 'y'], index=['c0', 'c1', 'c2', 'c3'])
+
+    with pytest.raises(ValueError, match='unknown method'):
+        scgenome.tl.align_tree_to_groups(tree, groups, method='nope')
+
+
+def test_many_groups_fall_back_to_greedy(tree):
+    """ The exact rotation costs roughly the square of the group count """
+    groups = pd.Series(['a', 'b', 'c', 'd'], index=['c0', 'c1', 'c2', 'c3'])
+
+    from scgenome.tools import ordering
+    original = ordering.MAX_OPTIMAL_GROUPS
+    try:
+        ordering.MAX_OPTIMAL_GROUPS = 2
+        auto = scgenome.tl.align_tree_to_groups(tree, groups)
+    finally:
+        ordering.MAX_OPTIMAL_GROUPS = original
+
+    greedy = scgenome.tl.align_tree_to_groups(tree, groups, method='greedy')
+
+    assert scgenome.tl.tree_leaf_order(auto) == scgenome.tl.tree_leaf_order(greedy)
+
+
+def test_align_tree_to_groups_gathers_fully_when_the_tree_allows(tree):
+    """ A label that follows the clades comes out as one block each """
+    groups = pd.Series(['x', 'x', 'y', 'y'], index=['c0', 'c1', 'c2', 'c3'])
+
+    order = scgenome.tl.tree_leaf_order(
+        scgenome.tl.align_tree_to_groups(tree, groups))
+    labels = [groups[c] for c in order]
+
+    assert 1 + sum(1 for a, b in zip(labels, labels[1:]) if a != b) == 2
+
+
+def test_align_tree_to_groups_honours_a_group_order(tree):
+    groups = pd.Series(['x', 'x', 'y', 'y'], index=['c0', 'c1', 'c2', 'c3'])
+
+    order = scgenome.tl.tree_leaf_order(
+        scgenome.tl.align_tree_to_groups(tree, groups, group_order=['y', 'x']))
+
+    assert [groups[c] for c in order][0] == 'y'
+
+
+def test_align_tree_to_groups_uses_categorical_order(tree):
+    groups = pd.Series(
+        pd.Categorical(['x', 'x', 'y', 'y'], categories=['y', 'x'], ordered=True),
+        index=['c0', 'c1', 'c2', 'c3'])
+
+    order = scgenome.tl.tree_leaf_order(
+        scgenome.tl.align_tree_to_groups(tree, groups))
+
+    assert groups[order[0]] == 'y'
+
+
+def test_align_tree_to_groups_reports_an_unknown_group(tree):
+    groups = pd.Series(['x', 'x', 'y', 'y'], index=['c0', 'c1', 'c2', 'c3'])
+
+    with pytest.raises(ValueError, match='not in group_order'):
+        scgenome.tl.align_tree_to_groups(tree, groups, group_order=['x'])
+
+
+def test_align_tree_to_groups_does_not_modify_the_caller_tree(tree):
+    groups = pd.Series(['y', 'y', 'x', 'x'], index=['c0', 'c1', 'c2', 'c3'])
+
+    scgenome.tl.align_tree_to_groups(tree, groups)
+
+    assert scgenome.tl.tree_leaf_order(tree) == ['c0', 'c1', 'c2', 'c3']
+
+
 def test_a_non_leaf_cell_splitting_a_clade_is_a_conflict(tree):
     """ Cells absent from the tree are caught by the same contiguity test
     """
     with pytest.raises(OrderConflict):
         scgenome.tl.align_tree_to_order(tree, ['c0', 'extra', 'c1', 'c2', 'c3'])
-
-
-def test_tree_leaves_missing_from_adata_are_reported(adata, tree):
-    with pytest.raises(ValueError, match='tree leaves are not cells in adata'):
-        scgenome.tl.resolve_cell_order(adata[:2], tree=tree)
-
-
-def test_cells_missing_from_tree_need_fields_to_order_them(adata, tree):
-    pruned = scgenome.tl.prune_leaves(tree, lambda c: c.name == 'c3')
-
-    with pytest.raises(ValueError, match='not leaves of the tree'):
-        scgenome.tl.resolve_cell_order(adata, tree=pruned)
-
-
-def test_tangle_names_what_to_use_instead(adata, tree):
-    with pytest.raises(NotImplementedError, match='dendrogram panel'):
-        scgenome.tl.resolve_cell_order(adata, tree=tree, on_conflict='tangle')
 
 
 def test_deep_ladder_tree_does_not_exhaust_the_stack():
@@ -206,10 +292,7 @@ def test_stored_leaves_agree_with_the_cell_order_column():
 
 def test_sort_clusters_keeps_the_cluster_level_linkage():
     adata = scgenome.datasets.OV2295_HMMCopy_reduced()
-    # Explicit agg_layers until fix-sort-clusters-defaults lands; without it
-    # aggregate_clusters returns clusters carrying no layers to sort
-    adata = scgenome.tl.sort_clusters(
-        adata, layer_name='copy', agg_layers={'copy': np.nanmedian})
+    adata = scgenome.tl.sort_clusters(adata, layer_name='copy')
 
     record = adata.uns['cell_order']['cluster_order']
 
@@ -243,18 +326,18 @@ def test_retained_linkage_round_trips_to_a_tree_and_catches_the_documented_idiom
     assert tree.count_terminals() == adata.shape[0]
 
     # The ordering the linkage produced is realizable, by construction
-    by_cell = scgenome.tl.resolve_cell_order(adata, fields=['cell_order'], tree=tree)
+    by_cell = scgenome.tl.resolve_cell_order(adata, fields=['cell_order'])
+    scgenome.tl.align_tree_to_order(tree, by_cell)
     assert list(by_cell) == list(adata.obs.sort_values('cell_order').index)
 
     # Grouping by cluster first splits clades, and must be refused
+    grouped = scgenome.tl.resolve_cell_order(adata, fields=['cluster_id', 'cell_order'])
     with pytest.raises(OrderConflict):
-        scgenome.tl.resolve_cell_order(
-            adata, fields=['cluster_id', 'cell_order'], tree=tree)
+        scgenome.tl.align_tree_to_order(tree, grouped)
 
-    # The escape hatch must yield something the tree can actually draw
-    rescued = scgenome.tl.resolve_cell_order(
-        adata, fields=['cluster_id', 'cell_order'], tree=tree, on_conflict='reorder')
-    scgenome.tl.align_tree_to_order(tree, rescued)
+    # The escape hatch must yield a tree that can actually be drawn
+    rescued = scgenome.tl.align_tree_to_order(tree, grouped, on_conflict='reorder')
+    scgenome.tl.align_tree_to_order(rescued, scgenome.tl.tree_leaf_order(rescued))
 
 
 # --- plotting takes an ordering instead of computing its own -------------
@@ -262,11 +345,11 @@ def test_retained_linkage_round_trips_to_a_tree_and_catches_the_documented_idiom
 
 def test_cell_order_matches_cell_order_fields(adata):
     plt.figure()
-    by_fields = scgenome.pl.plot_cell_matrix(adata, cell_order_fields=['group', 'rank'])
+    by_fields = scgenome.pl.plot_heatmap(adata, cell_order_fields=['group', 'rank'])
 
     order = scgenome.tl.resolve_cell_order(adata, fields=['group', 'rank'])
     plt.figure()
-    by_order = scgenome.pl.plot_cell_matrix(adata, cell_order=order)
+    by_order = scgenome.pl.plot_heatmap(adata, cell_order=order)
 
     assert list(by_fields['adata'].obs.index) == list(by_order['adata'].obs.index)
     np.testing.assert_array_equal(
@@ -278,7 +361,7 @@ def test_cell_order_matches_cell_order_fields(adata):
 def test_cell_order_and_cell_order_fields_are_mutually_exclusive(adata):
     plt.figure()
     with pytest.raises(ValueError, match='cannot provide both'):
-        scgenome.pl.plot_cell_matrix(
+        scgenome.pl.plot_heatmap(
             adata, cell_order_fields=['group'], cell_order=list(adata.obs.index))
     plt.close('all')
 
@@ -286,7 +369,7 @@ def test_cell_order_and_cell_order_fields_are_mutually_exclusive(adata):
 def test_unknown_cells_in_cell_order_are_reported(adata):
     plt.figure()
     with pytest.raises(ValueError, match='not in adata'):
-        scgenome.pl.plot_cell_matrix(adata, cell_order=['c0', 'nope'])
+        scgenome.pl.plot_heatmap(adata, cell_order=['c0', 'nope'])
     plt.close('all')
 
 
@@ -300,26 +383,32 @@ def test_tree_does_not_modify_the_caller_adata(adata, tree):
     plt.close('all')
 
 
-def test_tree_and_cell_order_fields_compose(adata, tree):
-    """ The old code refused this combination outright
-    """
+def test_a_tree_orders_the_rows_by_its_leaves(adata, tree):
     g = scgenome.pl.plot_cell_matrix_fig(
-        adata, layer_name='state', tree=tree,
-        cell_order_fields=['group', 'rank'], fig=plt.figure())
+        adata, layer_name='state', tree=tree, fig=plt.figure())
 
-    assert list(g['adata'].obs.index) == ['c3', 'c2', 'c1', 'c0']
+    assert list(g['adata'].obs.index) == scgenome.tl.tree_leaf_order(tree)
     plt.close('all')
 
 
-def test_conflicting_tree_and_fields_raise(adata, tree):
-    """ group alone splits both clades, since it pairs c1 with c2
+def test_a_tree_and_sort_fields_together_are_refused(adata, tree):
+    """ Reconciling them is align_tree_to_order, called by the user
     """
-    adata.obs['group'] = ['x', 'y', 'y', 'x']
-
-    with pytest.raises(OrderConflict):
+    with pytest.raises(ValueError, match='ordered one way'):
         scgenome.pl.plot_cell_matrix_fig(
             adata, layer_name='state', tree=tree,
             cell_order_fields=['group'], fig=plt.figure())
+    plt.close('all')
+
+
+def test_a_rotated_tree_is_how_fields_and_a_tree_are_combined(adata, tree):
+    order = scgenome.tl.resolve_cell_order(adata, fields=['group', 'rank'])
+    aligned = scgenome.tl.align_tree_to_order(tree, order)
+
+    g = scgenome.pl.plot_cell_matrix_fig(
+        adata, layer_name='state', tree=aligned, fig=plt.figure())
+
+    assert list(g['adata'].obs.index) == list(order)
     plt.close('all')
 
 
@@ -331,4 +420,82 @@ def test_show_subsets_does_not_grow_the_callers_list():
         adata, annotation_fields=fields, show_subsets=True, fig=plt.figure())
 
     assert fields == ['cluster_id']
+    plt.close('all')
+
+
+# --- reordering a dendrogram without converting it to a tree --------------
+
+
+def test_linkage_to_tree_round_trips_the_clustering():
+    adata = scgenome.datasets.OV2295_HMMCopy_reduced()
+    adata = scgenome.tl.sort_cells(adata, layer_name='copy')
+
+    tree = scgenome.tl.linkage_to_tree(adata)
+
+    assert tree.count_terminals() == adata.shape[0]
+    assert sorted(scgenome.tl.tree_leaf_order(tree)) == sorted(adata.obs.index)
+    # the stored leaf order is one the tree admits
+    scgenome.tl.align_tree_to_order(
+        tree, adata.obs.sort_values('cell_order').index)
+
+
+def test_linkage_to_tree_needs_a_stored_linkage():
+    adata = scgenome.datasets.OV2295_HMMCopy_reduced()
+
+    with pytest.raises(ValueError, match='no stored linkage'):
+        scgenome.tl.linkage_to_tree(adata)
+
+
+def test_order_cells_by_groups_gathers_without_breaking_the_dendrogram():
+    """ Reordering whole merges keeps the result drawable against the dendrogram """
+    adata = scgenome.datasets.OV081_Signals_reduced()
+    adata = scgenome.tl.sort_cells(adata, layer_name='copy')
+
+    record = adata.uns['cell_order']['cell_order']
+    as_sorted = adata.obs.sort_values('cell_order').index
+    gathered = scgenome.tl.order_cells_by_groups(adata, 'cluster_id')
+
+    def blocks(order):
+        labels = adata.obs['cluster_id'].astype(str).reindex(order).tolist()
+        return 1 + sum(1 for a, b in zip(labels, labels[1:]) if a != b)
+
+    assert sorted(gathered) == sorted(as_sorted)
+    assert blocks(gathered) < blocks(as_sorted)
+    assert scgenome.tl.linkage_order_conflict(
+        record['linkage'], record['ids'], gathered) is None
+
+
+def test_order_cells_by_groups_accepts_a_series():
+    adata = scgenome.datasets.OV2295_HMMCopy_reduced()
+    adata = scgenome.tl.sort_cells(adata, layer_name='copy')
+
+    by_name = scgenome.tl.order_cells_by_groups(adata, 'cluster_id')
+    by_series = scgenome.tl.order_cells_by_groups(adata, adata.obs['cluster_id'])
+
+    assert list(by_name) == list(by_series)
+
+
+def test_order_cells_by_groups_reports_a_missing_column():
+    adata = scgenome.datasets.OV2295_HMMCopy_reduced()
+    adata = scgenome.tl.sort_cells(adata, layer_name='copy')
+
+    with pytest.raises(ValueError, match='missing obs column'):
+        scgenome.tl.order_cells_by_groups(adata, 'nope')
+
+
+def test_order_cells_by_groups_needs_a_stored_linkage():
+    adata = scgenome.datasets.OV2295_HMMCopy_reduced()
+
+    with pytest.raises(ValueError, match='no stored linkage'):
+        scgenome.tl.order_cells_by_groups(adata, 'cluster_id')
+
+
+def test_order_cells_by_groups_is_drawable_by_the_dendrogram_panel():
+    adata = scgenome.datasets.OV2295_HMMCopy_reduced()
+    adata = scgenome.tl.sort_cells(adata, layer_name='copy')
+
+    order = scgenome.tl.order_cells_by_groups(adata, 'cluster_id')
+
+    # would raise OrderConflict if the order cut across a merge
+    scgenome.pl.plot_dendrogram(adata, ax=plt.subplots()[1], cell_order=order)
     plt.close('all')

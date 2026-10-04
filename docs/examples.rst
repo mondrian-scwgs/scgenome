@@ -13,6 +13,12 @@ Plotting
     quality annotation bars, cytoband annotation of bins, and rebinning to a
     coarser resolution for display.
 
+:doc:`notebooks/composing_panels`
+    Several panels against one shared row order: two layers side by side, a
+    tree or dendrogram relating the cells, bin and cell annotation bars, two
+    samples compared in place, and what happens when an order and a tree
+    disagree.
+
 :doc:`notebooks/cell_plotting`
     Copy number profiles for individual cells along the genome: colouring by
     integer state, zooming to a chromosome or region, non-linear y-axis
@@ -43,6 +49,7 @@ Plotting
    :maxdepth: 3
 
    notebooks/heatmap
+   notebooks/composing_panels
    notebooks/cell_plotting
    notebooks/allele_specific_plotting
    notebooks/multi_region_plotting

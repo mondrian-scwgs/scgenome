@@ -70,7 +70,12 @@ Ordering
    tl.resolve_cell_order
    tl.resolve_bin_order
    tl.align_tree_to_order
+   tl.align_tree_to_groups
+   tl.order_cells_by_groups
+   tl.linkage_to_tree
    tl.tree_leaf_order
+   tl.linkage_order_conflict
+   tl.OrderConflict
 
 Embeddings
 ~~~~~~~~~~
@@ -152,6 +157,24 @@ Copy number heatmaps
    pl.plot_cell_ascn_matrix_fig
    pl.plot_cell_matrix
    pl.plot_cell_matrix_fig
+
+Drawing primitives and layout
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autosummary::
+   :toctree: generated/
+
+   pl.plot_heatmap
+   pl.plot_obs_annotation
+   pl.plot_var_annotation
+   pl.plot_tree
+   pl.plot_dendrogram
+   pl.CellGrid
+   pl.GridResult
+   pl.LegendSpec
+   pl.PanelResult
+   pl.draw_legend
+   pl.map_categorical_colors
    pl.plot_cn_rect
 
 Copy number profiles

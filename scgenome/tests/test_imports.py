@@ -14,6 +14,12 @@ def test_imports():
 
     print(scgenome.pl.plot_cn_profile)
     print(scgenome.pl.plot_profile)
+    print(scgenome.pl.plot_heatmap)
+    print(scgenome.pl.plot_obs_annotation)
+    print(scgenome.pl.plot_var_annotation)
+    print(scgenome.pl.plot_tree)
+    print(scgenome.pl.plot_dendrogram)
+    print(scgenome.pl.CellGrid)
     print(scgenome.pl.plot_cell_matrix)
     print(scgenome.pl.plot_cell_matrix_fig)
     print(scgenome.pl.plot_cell_tcn_matrix)

@@ -121,7 +121,7 @@ def test_cmap_and_palette_are_mutually_exclusive(allele_adata):
     adata = cn_colors.add_allele_state_layer(allele_adata)
 
     with pytest.raises(ValueError, match='cannot provide both'):
-        scgenome.pl.plot_cell_matrix(
+        scgenome.pl.plot_heatmap(
             adata, layer_name='allele_state', cmap='viridis', palette='cn')
 
     plt.close('all')
@@ -130,7 +130,7 @@ def test_cmap_and_palette_are_mutually_exclusive(allele_adata):
 def test_plot_cell_matrix_defaults_to_continuous(allele_adata):
     """ The generic matrix makes no assumption about what the values mean
     """
-    g = scgenome.pl.plot_cell_matrix(allele_adata, layer_name='A')
+    g = scgenome.pl.plot_heatmap(allele_adata, layer_name='A')
 
     assert g['palette_info'] is None
     assert g['im'].cmap.name == 'viridis'
