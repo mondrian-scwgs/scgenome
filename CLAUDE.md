@@ -114,6 +114,19 @@ collect legends and drop duplicates. All return a `PanelResult`, which supports
 only two things: allocating axes and collecting legends. Everything drawn comes
 from the drawing primitives above.
 
+`scgenome/plotting` is layered, and imports only ever point down:
+
+```
+cn_colors, results   palettes; what a drawing function returns
+heatmap, phylo       drawing primitives, one axes each
+grid                 CellGrid, which arranges them
+presets              the *_fig figures, built on CellGrid
+```
+
+Keep a new drawing function in `heatmap.py` or `phylo.py` by topic, and
+anything that builds a whole figure in `presets.py`. Putting a preset beside a
+primitive is what previously forced them apart into a module of their own.
+
 ```python
 g = (scgenome.pl.CellGrid(adata, cell_order_fields=['cell_order'], figsize=(14, 5))
      .add_dendrogram()

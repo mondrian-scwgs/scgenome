@@ -13,14 +13,15 @@ into one.
 """
 
 from dataclasses import dataclass, field
-from typing import Any, Callable, List, Optional
+from typing import Any, Callable, List
 
 import matplotlib.pyplot as plt
-import numpy as np
 import pandas as pd
 
 from scgenome.tools.ordering import resolve_cell_order, tree_leaf_order
-from . import elements as _elements
+from . import heatmap as _heatmap
+from . import phylo as _phylo
+from . import results as _results
 
 
 # Widths are in the same units the old figure layout used, so a grid holding
@@ -201,7 +202,7 @@ class CellGrid:
         kwargs.setdefault('on_missing', 'blank' if adata is not None else 'raise')
 
         def draw(ax, _source=source, _layer=layer, _title=legend_title, _kwargs=kwargs):
-            return _elements.plot_heatmap(
+            return _heatmap.plot_heatmap(
                 _source, layer_name=_layer, ax=ax, cell_order=self.cell_order,
                 style=self.style, title=_title, **_kwargs)
 
@@ -232,7 +233,7 @@ class CellGrid:
             name = self._unique_name(f)
 
             def draw(ax, _f=f, _cmap=cmap.get(f)):
-                return _elements.plot_obs_annotation(
+                return _heatmap.plot_obs_annotation(
                     self.adata, _f, ax=ax, cell_order=self.cell_order,
                     cmap=_cmap, style=self.style)
 
@@ -314,7 +315,7 @@ class CellGrid:
         name = self._unique_name(name)
 
         def draw(ax, _tree=tree):
-            return _elements.plot_tree(_tree, ax=ax)
+            return _phylo.plot_tree(_tree, ax=ax)
 
         return self._add(_Panel('tree', name, width, draw))
 
@@ -344,7 +345,7 @@ class CellGrid:
         name = self._unique_name(name)
 
         def draw(ax, _key=key, _kwargs=kwargs):
-            return _elements.plot_dendrogram(
+            return _phylo.plot_dendrogram(
                 self.adata, ax=ax, cell_order=self.cell_order, key=_key, **_kwargs)
 
         return self._add(_Panel('dendrogram', name, width, draw))
@@ -421,7 +422,7 @@ class CellGrid:
                 var_ax = axes[main_row - 2 - i, col]
                 var_ax.set_axis_on()
                 var_ax.set_xticks([])
-                var_drawn = _elements.plot_var_annotation(
+                var_drawn = _heatmap.plot_var_annotation(
                     self.adata, var_field, ax=var_ax, cmap=var_cmap, style=self.style)
 
                 name = f'{panel.name}:{var_field}'
@@ -447,7 +448,7 @@ class CellGrid:
             ax.patch.set_alpha(0.0)
 
         for ax, (name, spec) in zip(legend_axes, unique):
-            result.legends[spec.title] = _elements.draw_legend(spec, ax)
+            result.legends[spec.title] = _results.draw_legend(spec, ax)
 
         result.axes['_legends'] = legend_axes
 

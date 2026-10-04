@@ -1,13 +1,165 @@
+""" Trees and dendrograms drawn beside cell rows.
+
+Both fill one axes and draw rows at ``y == i`` for row ``i`` of the order they
+are given, so they line up with a heatmap drawn in the same order. See
+:mod:`scgenome.plotting.heatmap` for that convention and
+:mod:`scgenome.plotting.results` for how legends are reported.
+"""
+
 import warnings
 
 import Bio.Phylo
-import numpy as np
 import matplotlib.pyplot as plt
-import seaborn as sns
-from matplotlib import gridspec
+import numpy as np
 
-from .grid import CellGrid
-from .elements import map_categorical_colors
+from scgenome.tools.ordering import OrderConflict, linkage_order_conflict
+from .cn_colors import map_categorical_colors
+from .results import PanelResult
+
+
+def plot_tree(tree, ax=None, linewidth=0.5):
+    """ Draw a phylogenetic tree beside heatmap rows
+
+    Draws the tree exactly as given, top to bottom. Rows line up when the row
+    order is the tree's own leaf order, which is what
+    :func:`~scgenome.tl.tree_leaf_order` returns and what
+    :class:`~scgenome.pl.CellGrid` uses when handed a tree. To draw a tree
+    against some other order, rotate it first with
+    :func:`~scgenome.tl.align_tree_to_order`.
+
+    Parameters
+    ----------
+    tree : Bio.Phylo.BaseTree.Tree
+        tree whose leaf names are cell ids, not modified
+    ax : matplotlib.axes.Axes, optional
+        axes to draw into, by default the current axes
+    linewidth : float, optional
+        width of tree branches, by default 0.5
+
+    Returns
+    -------
+    PanelResult
+    """
+    if ax is None:
+        ax = plt.gca()
+
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.spines['bottom'].set_visible(True)
+    ax.spines['left'].set_visible(False)
+
+    with plt.rc_context({'lines.linewidth': linewidth}):
+        Bio.Phylo.draw(tree, label_func=lambda a: '', axes=ax, do_show=False)
+
+    ax.tick_params(axis='x', labelsize=6)
+    ax.set_xlabel('branch length', fontsize=8)
+    ax.set_ylabel('')
+    ax.set_yticks([])
+    ax.set_ylim((tree.count_terminals() + 0.5, 0.5))
+
+    return PanelResult(ax=ax, extras={'tree': tree})
+
+
+def plot_dendrogram(adata, ax=None, cell_order=None, key='cell_order', color='black',
+               linewidth=0.5, orientation='left'):
+    """ Draw the hierarchical clustering behind an ordering
+
+    Reads the linkage :func:`~scgenome.tl.sort_cells` stored in
+    ``uns['cell_order'][key]``, so the dendrogram describes the same clustering
+    the ordering came from rather than a fresh one.
+
+    Leaves are placed at the rows given by ``cell_order``, so the dendrogram
+    lines up with a heatmap drawn in that order. If some merge's leaves are
+    split by that order its brackets would cross, and
+    ``OrderConflict`` is raised instead.
+
+    Parameters
+    ----------
+    adata : AnnData
+        data sorted by :func:`~scgenome.tl.sort_cells`
+    ax : matplotlib.axes.Axes, optional
+        axes to draw into, by default the current axes
+    cell_order : pandas.Index, optional
+        cell ids in row order, by default the order the linkage produced
+    key : str, optional
+        which stored ordering to draw, by default 'cell_order'
+    color : str, optional
+        branch color, by default 'black'
+    linewidth : float, optional
+        branch width, by default 0.5
+    orientation : str, optional
+        'left' to put leaves on the right, adjacent to a heatmap, or 'right'
+        for the mirror image, by default 'left'
+
+    Returns
+    -------
+    PanelResult
+
+    Reads
+    -----
+    adata.uns['cell_order'][key] : linkage, leaves and ids
+    """
+    if ax is None:
+        ax = plt.gca()
+
+    records = adata.uns.get('cell_order', {})
+    if key not in records:
+        raise ValueError(
+            f'no stored linkage {key!r}, run scgenome.tl.sort_cells first. '
+            f'Available: {sorted(records.keys())}')
+
+    record = records[key]
+    linkage = np.asarray(record['linkage'])
+    ids = list(np.asarray(record['ids']))
+
+    if cell_order is None:
+        cell_order = [ids[i] for i in np.asarray(record['leaves'])]
+    cell_order = list(cell_order)
+
+    conflict = linkage_order_conflict(linkage, ids, cell_order)
+    if conflict is not None:
+        lo, hi, n_leaves = conflict
+        raise OrderConflict(
+            None, lo, hi, n_leaves, remedy=OrderConflict.DENDROGRAM_REMEDY)
+
+    positions = {cell_id: i for i, cell_id in enumerate(cell_order)}
+    missing = [i for i in ids if i not in positions]
+    if missing:
+        raise ValueError(
+            f'{len(missing)} cells in the stored linkage are not in cell_order, '
+            f'for instance {missing[:3]}')
+
+    n = len(ids)
+    node_position = {i: positions[ids[i]] for i in range(n)}
+    node_height = {i: 0.0 for i in range(n)}
+
+    for k, row in enumerate(linkage):
+        left, right, height = int(row[0]), int(row[1]), float(row[2])
+
+        xs = [node_height[left], height, height, node_height[right]]
+        ys = [node_position[left], node_position[left],
+              node_position[right], node_position[right]]
+        ax.plot(xs, ys, color=color, linewidth=linewidth, solid_joinstyle='miter')
+
+        node_position[n + k] = (node_position[left] + node_position[right]) / 2.
+        node_height[n + k] = height
+
+    max_height = float(linkage[:, 2].max()) if len(linkage) else 1.
+
+    ax.set_ylim(len(cell_order) - 0.5, -0.5)
+    if orientation == 'left':
+        ax.set_xlim(max_height * 1.05, 0)
+    else:
+        ax.set_xlim(0, max_height * 1.05)
+
+    ax.set_yticks([])
+    ax.tick_params(axis='x', labelsize=6)
+    ax.set_xlabel('distance', fontsize=8)
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.spines['left'].set_visible(False)
+
+    return PanelResult(ax=ax, extras={'linkage': linkage, 'ids': ids})
 
 
 def map_annotations_to_colors(annotation, cmap):
@@ -25,132 +177,3 @@ def map_annotations_to_colors(annotation, cmap):
     level_colors, _ = map_categorical_colors(values, cmap=cmap)
 
     return [level_colors[value] for value in values], level_colors
-
-
-def plot_tree_cn(
-        tree,
-        adata,
-        chrom_segments=True,
-        layer_name=None,
-        obs_annotation=None,
-        obs_cmap=None,
-        var_label=None,
-        fig=None,
-        cmap=None,
-        palette=None,
-        raw=None,
-        max_cn=None):
-    """ Plot a tree aligned to a CN values matrix heatmap
-
-    .. deprecated::
-        Use :class:`~scgenome.pl.CellGrid`, which places a tree beside any
-        number of heatmaps against one shared row order::
-
-            g = (scgenome.pl.CellGrid(adata, tree=tree)
-                 .add_tree()
-                 .add_heatmap('state', palette='cn')
-                 .add_obs_annotation(['cluster_id'])
-                 .plot())
-
-    Parameters
-    ----------
-    tree : Bio.Phylo.BaseTree.Tree
-        phylogenetic tree
-    adata : AnnData
-        Copy number data, either genes or segments
-    chrom_segments : bool, optional
-        whether adata is genes or segments, by default True
-    layer_name : str, optional
-        layer to plot for copy number heatmap, by default None
-    obs_annotation : str, optional
-        column of adata.obs to annotate cells, by default None
-    obs_cmap : matplotlib.colors.Colormap, optional
-        color map for cell annotations, by default None
-    var_label : str, optional
-        column of adata.var to use for heatmap var labels, by default None use index
-    fig : matplotlib.figure.Figure, optional
-        existing figure to plot into, by default None
-    raw : bool, optional
-        raw plotting, no integer color map, by default False
-    max_cn : int, optional
-        clip cn at max value, by default 13
-
-    Returns
-    -------
-    matplotlib.figure.Figure
-        the figure drawn into
-    """
-    warnings.warn(
-        'plot_tree_cn is deprecated, use scgenome.pl.CellGrid with .add_tree() '
-        'and .add_heatmap()',
-        DeprecationWarning, stacklevel=2)
-
-    if fig is None:
-        fig = plt.figure(figsize=(16, 12), dpi=150)
-
-    if chrom_segments:
-        if raw is not None:
-            warnings.warn(
-                'raw is deprecated, pass cmap for a continuous colormap or '
-                "palette='cn' for total copy number states",
-                DeprecationWarning, stacklevel=2)
-
-        if max_cn is not None:
-            warnings.warn(
-                'max_cn has no effect and will be removed',
-                DeprecationWarning, stacklevel=2)
-
-        if cmap is None and palette is None and raw is False:
-            palette = 'cn'
-
-        grid = CellGrid(adata, tree=tree, fig=fig)
-        grid.add_tree(tree)
-        grid.add_heatmap(layer_name, name='heatmap', cmap=cmap, palette=palette)
-
-        if obs_annotation is not None:
-            grid.add_obs_annotation(
-                obs_annotation, cmap={obs_annotation: obs_cmap} if obs_cmap else None)
-
-        grid.plot()
-
-        return fig
-
-    # Gene level data has no genomic bins to lay out, so it keeps the old
-    # seaborn path rather than moving onto CellGrid
-    from scgenome.tools.ordering import align_tree_to_order, tree_leaf_order
-
-    order = tree_leaf_order(tree)
-    aligned = align_tree_to_order(tree, order)
-
-    gs = gridspec.GridSpec(1, 3, width_ratios=(0.4, 0.58, 0.02))
-
-    ax = fig.add_subplot(gs[0, 0])
-    ax.spines['top'].set_visible(False)
-    ax.spines['right'].set_visible(False)
-    ax.spines['bottom'].set_visible(True)
-    ax.spines['left'].set_visible(False)
-    ax.get_yaxis().set_ticks([])
-    Bio.Phylo.draw(aligned, label_func=lambda a: '', axes=ax, do_show=False)
-
-    ax = fig.add_subplot(gs[0, 1])
-
-    positions = adata.obs.index.get_indexer(order)
-    mat = adata[positions, :].to_df(layer=layer_name)
-    if var_label is not None:
-        mat = mat.rename(columns=adata.var[var_label])
-
-    cbar_ax = fig.add_axes([0.45, 0.0, 0.2, 0.01])
-    sns.heatmap(mat, ax=ax, cbar_ax=cbar_ax, cbar_kws={'orientation': 'horizontal'})
-    ax.set_yticks([])
-
-    if obs_annotation is not None:
-        ax = fig.add_subplot(gs[0, 2])
-        values = adata.obs[obs_annotation].reindex(order).values.reshape(-1, 1)
-        _, value_colors = map_categorical_colors(values, cmap=obs_cmap)
-        ax.imshow(value_colors, aspect='auto', interpolation='none')
-        ax.set_xticks([])
-        ax.set_yticks([])
-
-    plt.subplots_adjust(left=0.065, right=0.97, top=0.96, bottom=0.065, wspace=0.01)
-
-    return fig
