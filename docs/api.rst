@@ -24,6 +24,7 @@ Data loading
    :toctree: generated/
 
    pp.read_dlp_hmmcopy
+   pp.read_dlp_signals
    pp.read_medicc2_cn
    pp.read_snv_genotyping
    pp.convert_dlp_hmmcopy

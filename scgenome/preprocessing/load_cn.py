@@ -1,12 +1,9 @@
-import logging
 import pandas as pd
 import numpy as np
 import anndata as ad
-import pyranges as pr
 
 from anndata import AnnData
-from pyranges import PyRanges
-from typing import Dict, Optional, Sequence
+from typing import Optional, Sequence
 from pandas import DataFrame
 
 from ..utils import union_categories
@@ -61,7 +58,7 @@ def read_dlp_signals(hscn_filename) -> AnnData:
         'state_phase': 'category',
     }
 
-    hscn = pd.read_csv(hscn_filename, dtype=hscn_dtype)
+    hscn = pd.read_csv(hscn_filename, dtype=hscn_dtype, low_memory=False)
 
     layers_columns = [
         'totalcounts',
@@ -139,8 +136,16 @@ def create_cn_anndata(
     if len(duplicate_cell_ids) > 0:
         raise ValueError(f'cell {duplicate_cell_ids[0]} is duplicated, and {len(duplicate_cell_ids)} others')
 
-    assert not cell_metrics_data.duplicated(subset=['cell_id']).any()
-    assert not bin_metrics_data.duplicated(subset=['chr', 'start', 'end']).any()
+    duplicate_cells = cell_metrics_data.loc[cell_metrics_data.duplicated(subset=['cell_id']), 'cell_id'].unique()
+    if len(duplicate_cells) > 0:
+        raise ValueError(f'cell_metrics_data has {len(duplicate_cells)} duplicate cell ids, including {duplicate_cells[0]}')
+
+    duplicate_bins = bin_metrics_data.loc[bin_metrics_data.duplicated(subset=['chr', 'start', 'end']), ['chr', 'start', 'end']].drop_duplicates()
+    if len(duplicate_bins) > 0:
+        first_bin = duplicate_bins.iloc[0]
+        raise ValueError(
+            f'bin_metrics_data has {len(duplicate_bins)} duplicate bins, '
+            f'including {first_bin["chr"]}:{first_bin["start"]}-{first_bin["end"]}')
 
     cell_index = pd.Index(cn_data['cell_id'].drop_duplicates(), name='cell_id')
     chr_start_end_index = pd.MultiIndex.from_frame(
