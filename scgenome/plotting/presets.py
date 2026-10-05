@@ -18,17 +18,20 @@ import Bio.Phylo
 from scgenome.tools.ordering import (
     align_tree_to_order, resolve_cell_order, tree_leaf_order)
 from .cn_colors import map_categorical_colors
+from scgenome._deprecate import renamed_arguments, warn_renamed
 from .grid import CellGrid
 from .heatmap import (
     _deprecated_cn_matrix_args, _warn_if_not_integer, _with_allele_state_layer)
 
 
-def plot_cell_matrix_fig(
+@renamed_arguments(cell_order='obs_order', cell_order_fields='obs_order_fields',
+                   bin_order='var_order', show_cell_ids='show_obs_ids')
+def plot_heatmap_fig(
         adata: AnnData,
         layer_name=None,
         tree=None,
-        cell_order_fields=None,
-        cell_order=None,
+        obs_order_fields=None,
+        obs_order=None,
         annotation_fields=None,
         annotation_cmap=None,
         var_annotation_fields=None,
@@ -38,15 +41,15 @@ def plot_cell_matrix_fig(
         vmax=None,
         cmap=None,
         palette=None,
-        show_cell_ids=False,
+        show_obs_ids=False,
         show_subsets=False,
         style='black'):
     """ Plot a matrix of per cell values with annotations and a legend
 
     Makes no assumption about what the values mean. Values are colored with a
     continuous colormap unless a discrete `palette` is given. For total copy
-    number or allele specific states, prefer `plot_cell_tcn_matrix_fig` or
-    `plot_cell_ascn_matrix_fig`, which select the matching palette for you.
+    number or allele specific states, prefer `plot_tcn_heatmap_fig` or
+    `plot_ascn_heatmap_fig`, which select the matching palette for you.
 
     Parameters
     ----------
@@ -56,11 +59,11 @@ def plot_cell_matrix_fig(
         layer with values to plot, None for X, by default None
     tree : Bio.Phylo.BaseTree.Tree, optional
         phylogenetic tree
-    cell_order_fields : list, optional
+    obs_order_fields : list, optional
         columns of obs on which to sort cells, by default None
-    cell_order : pandas.Index, optional
+    obs_order : pandas.Index, optional
         explicit cell ids in plot order, from `scgenome.tl.resolve_cell_order`.
-        Mutually exclusive with cell_order_fields and tree: a tree is already
+        Mutually exclusive with obs_order_fields and tree: a tree is already
         an order, so reconciling one with another is
         `scgenome.tl.align_tree_to_order`, called explicitly.
     annotation_fields : list, optional
@@ -82,7 +85,7 @@ def plot_cell_matrix_fig(
         the column decides how each entry is read: numeric columns take a
         continuous colormap name, categorical columns take either a colormap
         name or a dict mapping level to color.
-    show_cell_ids : bool, optional
+    show_obs_ids : bool, optional
         show cell ids on heatmap axis, by default False
     show_subsets : bool, optional
         show subset/superset categoricals to allow identification of cell sets
@@ -107,7 +110,7 @@ def plot_cell_matrix_fig(
         g = scgenome.pl.plot_cell_matrix_fig(
             adata,
             layer_name='copy', vmin=0, vmax=4,
-            cell_order_fields=['cell_order'],
+            obs_order_fields=['cell_order'],
             annotation_fields=['cluster_id', 'sample_id', 'quality'])
 
     """
@@ -119,10 +122,10 @@ def plot_cell_matrix_fig(
     var_annotation_cmap = var_annotation_cmap or {}
 
     given = []
-    if cell_order is not None:
-        given.append('cell_order')
-    if cell_order_fields:
-        given.append('cell_order_fields')
+    if obs_order is not None:
+        given.append('obs_order')
+    if obs_order_fields:
+        given.append('obs_order_fields')
     if tree is not None:
         given.append('tree')
 
@@ -134,10 +137,10 @@ def plot_cell_matrix_fig(
 
     if tree is not None:
         order = pd.Index(tree_leaf_order(tree))
-    elif cell_order is not None:
-        order = pd.Index(cell_order)
+    elif obs_order is not None:
+        order = pd.Index(obs_order)
     else:
-        order = resolve_cell_order(adata, fields=cell_order_fields or [])
+        order = resolve_cell_order(adata, fields=obs_order_fields or [])
 
     if show_subsets:
         # Subsets number the rows as drawn, so they follow display position
@@ -151,14 +154,14 @@ def plot_cell_matrix_fig(
             index=adata.obs.index, dtype='category')
         annotation_fields = annotation_fields + ['superset', 'subset']
 
-    grid = CellGrid(adata, cell_order=order, fig=fig, style=style)
+    grid = CellGrid(adata, obs_order=order, fig=fig, style=style)
 
     if tree is not None:
         grid.add_tree(tree)
 
     grid.add_heatmap(
         layer_name, name='heatmap', palette=palette, cmap=cmap,
-        vmin=vmin, vmax=vmax, show_cell_ids=show_cell_ids)
+        vmin=vmin, vmax=vmax, show_obs_ids=show_obs_ids)
 
     if var_annotation_fields:
         grid.add_var_annotation(var_annotation_fields, cmap=var_annotation_cmap)
@@ -199,7 +202,7 @@ def plot_cell_matrix_fig(
     }
 
 
-def plot_cell_tcn_matrix_fig(adata: AnnData, layer_name='state', **kwargs):
+def plot_tcn_heatmap_fig(adata: AnnData, layer_name='state', **kwargs):
     """ Plot a total copy number matrix with annotations and a legend
 
     Colors integer copy number states with the total copy number palette.
@@ -227,19 +230,19 @@ def plot_cell_tcn_matrix_fig(adata: AnnData, layer_name='state', **kwargs):
         import scgenome
         adata = scgenome.datasets.OV2295_HMMCopy_reduced()
 
-        g = scgenome.pl.plot_cell_tcn_matrix_fig(
+        g = scgenome.pl.plot_tcn_heatmap_fig(
             adata,
-            cell_order_fields=['cell_order'],
+            obs_order_fields=['cell_order'],
             annotation_fields=['cluster_id', 'sample_id', 'quality'])
 
     """
     _warn_if_not_integer(adata, layer_name)
 
-    return plot_cell_matrix_fig(
+    return plot_heatmap_fig(
         adata, layer_name=layer_name, palette='cn', **kwargs)
 
 
-def plot_cell_ascn_matrix_fig(adata: AnnData, **kwargs):
+def plot_ascn_heatmap_fig(adata: AnnData, **kwargs):
     """ Plot an allele specific copy number matrix with annotations and legend
 
     Plots the allele specific state of each bin in each cell, colored by the
@@ -271,13 +274,13 @@ def plot_cell_ascn_matrix_fig(adata: AnnData, **kwargs):
         adata = scgenome.datasets.OV081_Signals_reduced()
         adata = adata[:, adata.var['has_allele_cn']]
 
-        g = scgenome.pl.plot_cell_ascn_matrix_fig(
+        g = scgenome.pl.plot_ascn_heatmap_fig(
             adata,
-            cell_order_fields=['cell_order'],
+            obs_order_fields=['cell_order'],
             annotation_fields=['cluster_id', 'n_wgd'])
 
     """
-    return plot_cell_matrix_fig(
+    return plot_heatmap_fig(
         _with_allele_state_layer(adata),
         layer_name='allele_state', palette='allele_state', **kwargs)
 
@@ -286,16 +289,16 @@ def plot_cell_cn_matrix_fig(adata: AnnData, layer_name='state', cmap=None, palet
     """ Plot a copy number matrix with annotations and a legend
 
     .. deprecated::
-        Use `plot_cell_tcn_matrix_fig` for total copy number states,
-        `plot_cell_ascn_matrix_fig` for allele specific states, or
-        `plot_cell_matrix_fig` for any other values.
+        Use `plot_tcn_heatmap_fig` for total copy number states,
+        `plot_ascn_heatmap_fig` for allele specific states, or
+        `plot_heatmap_fig` for any other values.
     """
     warnings.warn(
-        'plot_cell_cn_matrix_fig is deprecated, use plot_cell_tcn_matrix_fig for total '
-        'copy number states or plot_cell_matrix_fig for other values',
+        'plot_cell_cn_matrix_fig is deprecated, use plot_tcn_heatmap_fig for total '
+        'copy number states or plot_heatmap_fig for other values',
         DeprecationWarning, stacklevel=2)
 
-    return plot_cell_matrix_fig(
+    return plot_heatmap_fig(
         adata, **_deprecated_cn_matrix_args(layer_name, cmap, palette, raw), **kwargs)
 
 
@@ -424,3 +427,33 @@ def plot_tree_cn(
     plt.subplots_adjust(left=0.065, right=0.97, top=0.96, bottom=0.065, wspace=0.01)
 
     return fig
+
+
+def plot_cell_matrix_fig(adata: AnnData, **kwargs):
+    """ Plot a cell by bin matrix with annotations and a legend
+
+    .. deprecated::
+        Use `plot_heatmap_fig`.
+    """
+    warn_renamed('plot_cell_matrix_fig', 'plot_heatmap_fig', stacklevel=2)
+    return plot_heatmap_fig(adata, **kwargs)
+
+
+def plot_cell_tcn_matrix_fig(adata: AnnData, layer_name='state', **kwargs):
+    """ Plot a total copy number matrix with annotations and a legend
+
+    .. deprecated::
+        Use `plot_tcn_heatmap_fig`.
+    """
+    warn_renamed('plot_cell_tcn_matrix_fig', 'plot_tcn_heatmap_fig', stacklevel=2)
+    return plot_tcn_heatmap_fig(adata, layer_name=layer_name, **kwargs)
+
+
+def plot_cell_ascn_matrix_fig(adata: AnnData, **kwargs):
+    """ Plot an allele specific copy number matrix with annotations and a legend
+
+    .. deprecated::
+        Use `plot_ascn_heatmap_fig`.
+    """
+    warn_renamed('plot_cell_ascn_matrix_fig', 'plot_ascn_heatmap_fig', stacklevel=2)
+    return plot_ascn_heatmap_fig(adata, **kwargs)

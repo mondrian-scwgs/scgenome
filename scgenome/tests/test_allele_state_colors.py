@@ -138,10 +138,10 @@ def test_plot_cell_matrix_defaults_to_continuous(allele_adata):
     plt.close('all')
 
 
-def test_plot_cell_tcn_matrix_uses_the_cn_palette(allele_adata):
+def test_plot_tcn_heatmap_uses_the_cn_palette(allele_adata):
     allele_adata.layers['state'] = np.ones(allele_adata.shape)
 
-    g = scgenome.pl.plot_cell_tcn_matrix(allele_adata)
+    g = scgenome.pl.plot_tcn_heatmap(allele_adata)
 
     colors = g['im'].get_array()
     np.testing.assert_array_equal(
@@ -150,23 +150,23 @@ def test_plot_cell_tcn_matrix_uses_the_cn_palette(allele_adata):
     plt.close('all')
 
 
-def test_plot_cell_tcn_matrix_warns_on_continuous_layer(allele_adata):
+def test_plot_tcn_heatmap_warns_on_continuous_layer(allele_adata):
     """ The cn palette matches by equality, so continuous values render white
     """
     allele_adata.layers['copy'] = np.full(allele_adata.shape, 2.34)
 
     with pytest.warns(UserWarning, match='non integer values'):
-        scgenome.pl.plot_cell_tcn_matrix(allele_adata, layer_name='copy')
+        scgenome.pl.plot_tcn_heatmap(allele_adata, layer_name='copy')
 
     plt.close('all')
 
 
-def test_plot_cell_tcn_matrix_quiet_on_integer_layer(allele_adata):
+def test_plot_tcn_heatmap_quiet_on_integer_layer(allele_adata):
     allele_adata.layers['state'] = np.ones(allele_adata.shape)
 
     with warnings.catch_warnings():
         warnings.simplefilter('error', UserWarning)
-        scgenome.pl.plot_cell_tcn_matrix(allele_adata)
+        scgenome.pl.plot_tcn_heatmap(allele_adata)
 
     plt.close('all')
 
@@ -179,7 +179,7 @@ def test_deprecated_cn_matrix_matches_tcn_matrix(allele_adata):
     with pytest.warns(DeprecationWarning, match='plot_cell_cn_matrix is deprecated'):
         deprecated = scgenome.pl.plot_cell_cn_matrix(allele_adata)
 
-    expected = scgenome.pl.plot_cell_tcn_matrix(allele_adata)
+    expected = scgenome.pl.plot_tcn_heatmap(allele_adata)
 
     np.testing.assert_array_equal(
         deprecated['im'].get_array(), expected['im'].get_array())
@@ -199,42 +199,42 @@ def test_deprecated_raw_selects_a_continuous_colormap(allele_adata):
     plt.close('all')
 
 
-def test_plot_cell_ascn_matrix_does_not_modify_input(allele_adata):
+def test_plot_ascn_heatmap_does_not_modify_input(allele_adata):
     """ Plotting functions must not mutate the caller's adata
     """
-    scgenome.pl.plot_cell_ascn_matrix(allele_adata)
+    scgenome.pl.plot_ascn_heatmap(allele_adata)
 
     assert 'allele_state' not in allele_adata.layers
 
     plt.close('all')
 
 
-def test_plot_cell_ascn_matrix_plots_all_bins(allele_adata):
+def test_plot_ascn_heatmap_plots_all_bins(allele_adata):
     """ Bins are not filtered, callers subset adata themselves
     """
-    g = scgenome.pl.plot_cell_ascn_matrix(allele_adata)
+    g = scgenome.pl.plot_ascn_heatmap(allele_adata)
     assert g['adata'].shape == (4, 6)
 
     plt.close('all')
 
 
-def test_plot_cell_ascn_matrix_reuses_existing_layer(allele_adata):
+def test_plot_ascn_heatmap_reuses_existing_layer(allele_adata):
     """ An allele_state layer already on the adata is plotted as given
     """
     adata = cn_colors.add_allele_state_layer(allele_adata.copy())
     adata.layers['allele_state'][:] = 2.
 
-    g = scgenome.pl.plot_cell_ascn_matrix(adata)
+    g = scgenome.pl.plot_ascn_heatmap(adata)
 
     np.testing.assert_array_equal(g['adata'].layers['allele_state'], 2.)
 
     plt.close('all')
 
 
-def test_plot_cell_ascn_matrix_fig_legend_lists_states(allele_adata):
+def test_plot_ascn_heatmap_fig_legend_lists_states(allele_adata):
     """ The allele heatmap gets a patch legend of named states, not a colorbar
     """
-    g = scgenome.pl.plot_cell_ascn_matrix_fig(allele_adata)
+    g = scgenome.pl.plot_ascn_heatmap_fig(allele_adata)
 
     legend = g['legend_info']['legend']
     assert legend.get_title().get_text() == 'AS CN state'

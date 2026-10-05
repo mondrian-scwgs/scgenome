@@ -15,6 +15,7 @@ import numpy as np
 from scgenome.tools.ordering import OrderConflict, linkage_order_conflict
 from .cn_colors import map_categorical_colors
 from .results import PanelResult
+from scgenome._deprecate import renamed_arguments
 
 
 def plot_tree(tree, ax=None, linewidth=0.5):
@@ -60,7 +61,8 @@ def plot_tree(tree, ax=None, linewidth=0.5):
     return PanelResult(ax=ax, extras={'tree': tree})
 
 
-def plot_dendrogram(adata, ax=None, cell_order=None, key='cell_order', color='black',
+@renamed_arguments(cell_order='obs_order', cell_order_fields='obs_order_fields', bin_order='var_order')
+def plot_dendrogram(adata, ax=None, obs_order=None, key='cell_order', color='black',
                linewidth=0.5, orientation='left'):
     """ Draw the hierarchical clustering behind an ordering
 
@@ -68,7 +70,7 @@ def plot_dendrogram(adata, ax=None, cell_order=None, key='cell_order', color='bl
     ``uns['cell_order'][key]``, so the dendrogram describes the same clustering
     the ordering came from rather than a fresh one.
 
-    Leaves are placed at the rows given by ``cell_order``, so the dendrogram
+    Leaves are placed at the rows given by ``obs_order``, so the dendrogram
     lines up with a heatmap drawn in that order. If some merge's leaves are
     split by that order its brackets would cross, and
     ``OrderConflict`` is raised instead.
@@ -79,7 +81,7 @@ def plot_dendrogram(adata, ax=None, cell_order=None, key='cell_order', color='bl
         data sorted by :func:`~scgenome.tl.sort_cells`
     ax : matplotlib.axes.Axes, optional
         axes to draw into, by default the current axes
-    cell_order : pandas.Index, optional
+    obs_order : pandas.Index, optional
         cell ids in row order, by default the order the linkage produced
     key : str, optional
         which stored ordering to draw, by default 'cell_order'
@@ -112,21 +114,21 @@ def plot_dendrogram(adata, ax=None, cell_order=None, key='cell_order', color='bl
     linkage = np.asarray(record['linkage'])
     ids = list(np.asarray(record['ids']))
 
-    if cell_order is None:
-        cell_order = [ids[i] for i in np.asarray(record['leaves'])]
-    cell_order = list(cell_order)
+    if obs_order is None:
+        obs_order = [ids[i] for i in np.asarray(record['leaves'])]
+    obs_order = list(obs_order)
 
-    conflict = linkage_order_conflict(linkage, ids, cell_order)
+    conflict = linkage_order_conflict(linkage, ids, obs_order)
     if conflict is not None:
         lo, hi, n_leaves = conflict
         raise OrderConflict(
             None, lo, hi, n_leaves, remedy=OrderConflict.DENDROGRAM_REMEDY)
 
-    positions = {cell_id: i for i, cell_id in enumerate(cell_order)}
+    positions = {cell_id: i for i, cell_id in enumerate(obs_order)}
     missing = [i for i in ids if i not in positions]
     if missing:
         raise ValueError(
-            f'{len(missing)} cells in the stored linkage are not in cell_order, '
+            f'{len(missing)} cells in the stored linkage are not in obs_order, '
             f'for instance {missing[:3]}')
 
     n = len(ids)
@@ -146,7 +148,7 @@ def plot_dendrogram(adata, ax=None, cell_order=None, key='cell_order', color='bl
 
     max_height = float(linkage[:, 2].max()) if len(linkage) else 1.
 
-    ax.set_ylim(len(cell_order) - 0.5, -0.5)
+    ax.set_ylim(len(obs_order) - 0.5, -0.5)
     if orientation == 'left':
         ax.set_xlim(max_height * 1.05, 0)
     else:

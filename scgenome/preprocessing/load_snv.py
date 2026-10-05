@@ -4,13 +4,16 @@ from scipy.sparse import csr_matrix
 
 from anndata import AnnData
 
+from scgenome._deprecate import renamed_arguments
 
-def read_snv_genotyping(filename: str) -> AnnData:
+
+@renamed_arguments(filename='genotyping_filename')
+def read_snv_genotyping(genotyping_filename: str) -> AnnData:
     """ Read SNV genotyping into an AnnData
 
     Parameters
     ----------
-    filename : str
+    genotyping_filename : str
         SNV genotyping filename
 
     Returns
@@ -21,7 +24,7 @@ def read_snv_genotyping(filename: str) -> AnnData:
         have zero counts, and duplicate cell-variant rows are summed.
     """
 
-    data = pd.read_csv(filename, dtype={
+    data = pd.read_csv(genotyping_filename, dtype={
         'chromosome': 'category',
         'ref': 'category',
         'alt': 'category',

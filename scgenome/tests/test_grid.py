@@ -100,14 +100,14 @@ def test_missing_cells_raise_by_default(adata):
 
     with pytest.raises(ValueError, match='not in adata'):
         scgenome.pl.plot_heatmap(
-            adata, layer_name='state', ax=ax, cell_order=['c0', 'nope'])
+            adata, layer_name='state', ax=ax, obs_order=['c0', 'nope'])
     plt.close('all')
 
 
 def test_missing_cells_can_be_blanked(adata):
     fig, ax = plt.subplots()
     result = scgenome.pl.plot_heatmap(
-        adata, layer_name='state', ax=ax, cell_order=['c0', 'nope', 'c1'],
+        adata, layer_name='state', ax=ax, obs_order=['c0', 'nope', 'c1'],
         on_missing='blank')
 
     drawn = np.asarray(result.im.get_array())
@@ -141,7 +141,7 @@ def test_dendrogram_draws_from_the_stored_linkage(adata):
     fig, ax = plt.subplots()
     order = adata.obs.sort_values('cell_order').index
 
-    result = scgenome.pl.plot_dendrogram(adata, ax=ax, cell_order=order)
+    result = scgenome.pl.plot_dendrogram(adata, ax=ax, obs_order=order)
 
     assert result.extras['linkage'].shape == (adata.shape[0] - 1, 4)
     assert ax.get_ylim() == (adata.shape[0] - 0.5, -0.5)
@@ -164,7 +164,7 @@ def test_dendrogram_refuses_an_order_that_would_cross_its_brackets(adata):
     scrambled = order[::2] + order[1::2]
 
     with pytest.raises(OrderConflict):
-        scgenome.pl.plot_dendrogram(adata, ax=ax, cell_order=scrambled)
+        scgenome.pl.plot_dendrogram(adata, ax=ax, obs_order=scrambled)
     plt.close('all')
 
 
@@ -172,9 +172,9 @@ def test_dendrogram_row_extent_matches_a_heatmap(adata):
     fig, axes = plt.subplots(ncols=2)
     order = adata.obs.sort_values('cell_order').index
 
-    scgenome.pl.plot_dendrogram(adata, ax=axes[0], cell_order=order)
+    scgenome.pl.plot_dendrogram(adata, ax=axes[0], obs_order=order)
     scgenome.pl.plot_heatmap(
-        adata, layer_name='state', ax=axes[1], palette='cn', cell_order=order)
+        adata, layer_name='state', ax=axes[1], palette='cn', obs_order=order)
 
     assert axes[0].get_ylim() == axes[1].get_ylim()
     plt.close('all')
@@ -184,7 +184,7 @@ def test_dendrogram_row_extent_matches_a_heatmap(adata):
 
 
 def test_two_heatmaps_share_one_row_order(adata):
-    g = (scgenome.pl.CellGrid(adata, cell_order_fields=['cell_order'])
+    g = (scgenome.pl.CellGrid(adata, obs_order_fields=['cell_order'])
          .add_heatmap('state', palette='cn', name='A')
          .add_heatmap('copy', cmap='viridis', name='B')
          .plot())
@@ -192,13 +192,13 @@ def test_two_heatmaps_share_one_row_order(adata):
     rows_a = list(g.panels['A'].extras['adata'].obs.index)
     rows_b = list(g.panels['B'].extras['adata'].obs.index)
 
-    assert rows_a == rows_b == list(g.cell_order)
+    assert rows_a == rows_b == list(g.obs_order)
     plt.close('all')
 
 
 def test_heatmap_width_does_not_depend_on_annotation_count(adata):
     """ The defect that made two separate figures incomparable """
-    g = (scgenome.pl.CellGrid(adata, cell_order_fields=['cell_order'])
+    g = (scgenome.pl.CellGrid(adata, obs_order_fields=['cell_order'])
          .add_heatmap('state', palette='cn', name='A')
          .add_heatmap('copy', cmap='viridis', name='B')
          .add_obs_annotation(['cluster_id', 'quality'])
@@ -212,7 +212,7 @@ def test_heatmap_width_does_not_depend_on_annotation_count(adata):
 
 
 def test_panels_share_a_row_extent(adata):
-    g = (scgenome.pl.CellGrid(adata, cell_order_fields=['cell_order'])
+    g = (scgenome.pl.CellGrid(adata, obs_order_fields=['cell_order'])
          .add_dendrogram()
          .add_heatmap('state', palette='cn', name='A')
          .add_obs_annotation('cluster_id')
@@ -225,7 +225,7 @@ def test_panels_share_a_row_extent(adata):
 
 
 def test_identical_legends_collapse(adata):
-    g = (scgenome.pl.CellGrid(adata, cell_order_fields=['cell_order'])
+    g = (scgenome.pl.CellGrid(adata, obs_order_fields=['cell_order'])
          .add_heatmap('state', palette='cn', name='A')
          .add_heatmap('state', palette='cn', name='B')
          .plot())
@@ -235,7 +235,7 @@ def test_identical_legends_collapse(adata):
 
 
 def test_different_legends_are_kept_apart(adata):
-    g = (scgenome.pl.CellGrid(adata, cell_order_fields=['cell_order'])
+    g = (scgenome.pl.CellGrid(adata, obs_order_fields=['cell_order'])
          .add_heatmap('state', palette='cn', name='A')
          .add_heatmap('copy', cmap='viridis', name='B')
          .plot())
@@ -248,7 +248,7 @@ def test_a_panel_may_carry_its_own_adata(adata):
     """ Two samples side by side, aligned by the shared order """
     half = adata[adata.obs.index[:6]].copy()
 
-    g = (scgenome.pl.CellGrid(adata, cell_order_fields=['cell_order'])
+    g = (scgenome.pl.CellGrid(adata, obs_order_fields=['cell_order'])
          .add_heatmap('state', palette='cn', name='all')
          .add_heatmap('state', adata=half, palette='cn', name='half')
          .plot())
@@ -266,13 +266,13 @@ def test_tree_and_heatmap_compose(adata, tree):
          .add_heatmap('state', palette='cn', name='A')
          .plot())
 
-    assert list(g.cell_order) == scgenome.tl.tree_leaf_order(tree)
+    assert list(g.obs_order) == scgenome.tl.tree_leaf_order(tree)
     assert g.axes['tree'].get_ylim() == (adata.shape[0] + 0.5, 0.5)
     plt.close('all')
 
 
 def test_var_annotation_sits_above_its_heatmap(adata):
-    g = (scgenome.pl.CellGrid(adata, cell_order_fields=['cell_order'])
+    g = (scgenome.pl.CellGrid(adata, obs_order_fields=['cell_order'])
          .add_heatmap('state', palette='cn', name='A')
          .add_var_annotation('gc')
          .plot())
@@ -296,7 +296,7 @@ def test_plot_needs_a_panel(adata):
 
 
 def test_duplicate_panel_names_are_made_unique(adata):
-    g = (scgenome.pl.CellGrid(adata, cell_order_fields=['cell_order'])
+    g = (scgenome.pl.CellGrid(adata, obs_order_fields=['cell_order'])
          .add_heatmap('state', palette='cn')
          .add_heatmap('state', palette='cn')
          .plot())
@@ -320,17 +320,17 @@ def test_grid_does_not_modify_adata(adata, tree):
 def test_rows_can_only_be_ordered_one_way(adata):
     with pytest.raises(ValueError, match='ordered one way'):
         scgenome.pl.CellGrid(
-            adata, cell_order_fields=['cell_order'], cell_order=adata.obs.index)
+            adata, obs_order_fields=['cell_order'], obs_order=adata.obs.index)
 
 
 def test_a_tree_and_an_order_together_are_refused(adata, tree):
     with pytest.raises(ValueError, match='ordered one way'):
-        scgenome.pl.CellGrid(adata, cell_order_fields=['cell_order'], tree=tree)
+        scgenome.pl.CellGrid(adata, obs_order_fields=['cell_order'], tree=tree)
 
 
 def test_add_tree_refuses_a_tree_that_is_not_the_row_order(adata, tree):
     """ Drawing it would imply groupings that are not there """
-    grid = scgenome.pl.CellGrid(adata, cell_order=list(adata.obs.index)[::-1])
+    grid = scgenome.pl.CellGrid(adata, obs_order=list(adata.obs.index)[::-1])
 
     with pytest.raises(ValueError, match='align_tree_to_order'):
         grid.add_tree(tree)
@@ -340,12 +340,12 @@ def test_a_rotated_tree_is_accepted(adata, tree):
     order = list(adata.obs.index)[::-1]
     aligned = scgenome.tl.align_tree_to_order(tree, order, on_conflict='reorder')
 
-    g = (scgenome.pl.CellGrid(adata, cell_order=scgenome.tl.tree_leaf_order(aligned))
+    g = (scgenome.pl.CellGrid(adata, obs_order=scgenome.tl.tree_leaf_order(aligned))
          .add_tree(aligned)
          .add_heatmap('state', palette='cn', name='A')
          .plot())
 
-    assert list(g.cell_order) == scgenome.tl.tree_leaf_order(aligned)
+    assert list(g.obs_order) == scgenome.tl.tree_leaf_order(aligned)
     plt.close('all')
 
 
@@ -353,8 +353,8 @@ def test_a_rotated_tree_is_accepted(adata, tree):
 
 
 def test_fig_preset_returns_the_documented_keys(adata):
-    g = scgenome.pl.plot_cell_tcn_matrix_fig(
-        adata, cell_order_fields=['cell_order'],
+    g = scgenome.pl.plot_tcn_heatmap_fig(
+        adata, obs_order_fields=['cell_order'],
         annotation_fields=['cluster_id'], fig=plt.figure())
 
     for key in ('fig', 'axes', 'tree_ax', 'heatmap_ax', 'adata', 'im',
@@ -367,8 +367,8 @@ def test_fig_preset_returns_the_documented_keys(adata):
 
 
 def test_fig_preset_exposes_the_grid(adata):
-    g = scgenome.pl.plot_cell_matrix_fig(
-        adata, layer_name='copy', cell_order_fields=['cell_order'], fig=plt.figure())
+    g = scgenome.pl.plot_heatmap_fig(
+        adata, layer_name='copy', obs_order_fields=['cell_order'], fig=plt.figure())
 
     assert isinstance(g['grid'], scgenome.pl.GridResult)
     plt.close('all')
@@ -389,11 +389,11 @@ def test_plot_cell_matrix_is_deprecated_and_equivalent(adata):
     with pytest.warns(DeprecationWarning, match='plot_heatmap'):
         old = scgenome.pl.plot_cell_matrix(
             adata, layer_name='state', palette='cn',
-            cell_order_fields=['cell_order'], ax=plt.subplots()[1])
+            obs_order_fields=['cell_order'], ax=plt.subplots()[1])
 
     new = scgenome.pl.plot_heatmap(
         adata, layer_name='state', palette='cn',
-        cell_order_fields=['cell_order'], ax=plt.subplots()[1])
+        obs_order_fields=['cell_order'], ax=plt.subplots()[1])
 
     np.testing.assert_array_equal(
         np.asarray(old.im.get_array()), np.asarray(new.im.get_array()))

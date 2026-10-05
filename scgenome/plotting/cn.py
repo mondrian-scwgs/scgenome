@@ -20,6 +20,13 @@ from scipy.sparse import issparse
 from scgenome.plotting import cn_colors
 from scgenome.plotting.cn_colors import allele_state_colors
 from scgenome.tools.cluster import aggregate_pseudobulk
+import functools
+import inspect
+import warnings
+
+from matplotlib import axes as mpl_axes
+
+from scgenome._deprecate import warn_renamed
 from scgenome.tools.getters import get_obs_data
 
 
@@ -643,6 +650,10 @@ def plot_profile(
 ):
     """Plot scatter points of copy number across the genome or a chromosome.
 
+    .. deprecated::
+        Use `plot_tcn_profile`, which names the values it draws rather than
+        the rows, and so reads correctly for clusters and pseudobulks too.
+
     Parameters
     ----------
     data : pandas.DataFrame
@@ -803,11 +814,16 @@ def plot_cn_profile(
         scgenome.pl.plot_cn_profile(adata, 'SA922-A90554B-R27-C43', value_layer_name='copy', state_layer_name='state')
 
     """
-    return plot_cell_tcn(
+    warn_renamed('plot_cn_profile', 'plot_tcn_profile', stacklevel=2)
+
+    # Defaults are forwarded explicitly rather than left to plot_tcn_profile:
+    # this function has always drawn X with no state coloring unless told
+    # otherwise, and that must not change under the rename.
+    return plot_tcn_profile(
         adata,
-        cell_id=obs_id,
-        y=value_layer_name,
-        hue=state_layer_name,
+        obs_id=obs_id,
+        value_layer_name=value_layer_name,
+        state_layer_name=state_layer_name,
         ax=ax,
         palette=palette,
         chromosome=chromosome,
@@ -818,8 +834,7 @@ def plot_cn_profile(
     )
 
 
-def plot_rearrangement_arcs(
-    ax,
+def _plot_rearrangement_arcs(
     breakpoints,
     chromosome=None,
     start=None,
@@ -843,6 +858,7 @@ def plot_rearrangement_arcs(
     alpha=1.0,
     zorder=10,
     region_mapper=None,
+    ax=None,
 ):
     """Plot rearrangement arcs linking breakpoint pairs.
     
@@ -870,8 +886,6 @@ def plot_rearrangement_arcs(
     
     Parameters
     ----------
-    ax : matplotlib.axes.Axes
-        Axes to draw on
     breakpoints : pandas.DataFrame
         DataFrame with columns:
         - chromosome_1, position_1, strand_1
@@ -950,7 +964,7 @@ def plot_rearrangement_arcs(
     >>> fig, ax = plt.subplots()
     >>> ax.set_xlim(0, 10e6)
     >>> ax.set_ylim(0, 8)
-    >>> plot_rearrangement_arcs(ax, brks, chromosome='chr1')
+    >>> plot_rearrangement_arcs(brks, chromosome='chr1', ax=ax)
     """
     artists = []
     breakpoints = breakpoints.copy()
@@ -960,6 +974,9 @@ def plot_rearrangement_arcs(
         if col in breakpoints.columns:
             breakpoints[col] = breakpoints[col].astype(str)
     
+    if ax is None:
+        ax = plt.gca()
+
     # Blended transform: x in data coords, y in axes coords
     trans = transforms.blended_transform_factory(ax.transData, ax.transAxes)
     
@@ -1209,6 +1226,27 @@ def plot_rearrangement_arcs(
     return artists
 
 
+@functools.wraps(_plot_rearrangement_arcs)
+def plot_rearrangement_arcs(*args, **kwargs):
+    # ax used to be the first positional parameter, unlike every other
+    # plotting function. A legacy call is unambiguous because an Axes is never
+    # a valid breakpoints table, so bind the old order by name and forward.
+    if args and isinstance(args[0], mpl_axes.Axes):
+        warnings.warn(
+            'passing ax first to plot_rearrangement_arcs is deprecated, pass '
+            'breakpoints first and ax as a keyword',
+            DeprecationWarning, stacklevel=2)
+        new_order = list(inspect.signature(_plot_rearrangement_arcs).parameters)
+        legacy_order = ['ax'] + [name for name in new_order if name != 'ax']
+        for name, value in zip(legacy_order, args):
+            if name in kwargs:
+                raise TypeError(
+                    f'plot_rearrangement_arcs() got multiple values for {name}')
+            kwargs[name] = value
+        args = ()
+    return _plot_rearrangement_arcs(*args, **kwargs)
+
+
 def plot_cn_rect(
         data,
         obs_id=None,
@@ -1342,35 +1380,36 @@ def plot_cn_rect(
     return ax
 
 
-def plot_cell_tcn(
+def plot_tcn_profile(
         adata: AnnData,
-        cell_id: str,
-        y='copy',
-        hue='state',
+        obs_id: str,
+        value_layer_name='copy',
+        state_layer_name='state',
         ax=None,
         palette=None,
         chromosome=None,
         start=None,
         end=None,
-        squashy=True,
+        squashy=False,
         region_mapper=None,
         **kwargs
 ):
-    """Plot a cell-specific total copy number profile.
+    """Plot a total copy number profile for one row of an AnnData.
 
-    Extracts data for a single cell from an AnnData object and plots copy number
-    as a scatter plot across the genome or a single chromosome. Points are colored
-    by copy number state.
+    Extracts one row from an AnnData and plots copy number as a scatter plot
+    across the genome or a single chromosome, colored by copy number state. The
+    row may be a cell, a cluster or any other observation, which is why this is
+    named for the values it draws rather than for what the rows are.
 
     Parameters
     ----------
     adata : anndata.AnnData
         copy number data
-    cell_id : str
-        cell identifier from adata.obs.index
-    y : str, optional
+    obs_id : str
+        observation to plot, from adata.obs.index
+    value_layer_name : str, optional
         layer with values for y axis, None for X, by default 'copy'
-    hue : str, optional
+    state_layer_name : str, optional
         layer with states for colors, None for no color by state, by default 'state'
     ax : matplotlib.axes.Axes, optional
         axes to plot on, by default current axes
@@ -1383,7 +1422,7 @@ def plot_cell_tcn(
     end : int, optional
         end of plotting region
     squashy : bool, optional
-        compress y axis, by default True
+        compress y axis, by default False
     **kwargs : dict
         additional arguments passed to plot_profile
 
@@ -1400,14 +1439,14 @@ def plot_cell_tcn(
 
         import scgenome
         adata = scgenome.datasets.OV2295_HMMCopy_reduced()
-        scgenome.pl.plot_cell_tcn(adata, 'SA922-A90554B-R27-C43')
+        scgenome.pl.plot_tcn_profile(adata, 'SA922-A90554B-R27-C43')
 
     """
     if ax is None:
         ax = plt.gca()
 
-    if y is None:
-        y = '_X'
+    y = value_layer_name if value_layer_name is not None else '_X'
+    hue = state_layer_name
 
     layers = {y}
     if hue is not None:
@@ -1415,7 +1454,7 @@ def plot_cell_tcn(
 
     cn_data = get_obs_data(
         adata,
-        cell_id,
+        obs_id,
         ['chr', 'start', 'end'],
         layer_names=layers)
 
@@ -1439,7 +1478,47 @@ def plot_cell_tcn(
     return ax
 
 
-def plot_cell_ascn(adata, cell_id, ax=None, chromosome=None, region_mapper=None, **kwargs):
+def plot_cell_tcn(
+        adata: AnnData,
+        cell_id: str,
+        y='copy',
+        hue='state',
+        ax=None,
+        palette=None,
+        chromosome=None,
+        start=None,
+        end=None,
+        squashy=True,
+        region_mapper=None,
+        **kwargs
+):
+    """Plot a cell-specific total copy number profile.
+
+    .. deprecated::
+        Use `plot_tcn_profile`. The rows of an AnnData are not always cells,
+        so the plot is named for the values it draws instead.
+    """
+    warn_renamed('plot_cell_tcn', 'plot_tcn_profile', stacklevel=2)
+
+    # squashy, y and hue are pinned from this function's own defaults rather
+    # than inherited: plot_tcn_profile defaults squashy to False, and an
+    # existing plot_cell_tcn call must keep drawing exactly what it drew.
+    return plot_tcn_profile(
+        adata,
+        obs_id=cell_id,
+        value_layer_name=y,
+        state_layer_name=hue,
+        ax=ax,
+        palette=palette,
+        chromosome=chromosome,
+        start=start,
+        end=end,
+        squashy=squashy,
+        region_mapper=region_mapper,
+        **kwargs)
+
+
+def plot_ascn_profile(adata, obs_id, ax=None, chromosome=None, region_mapper=None, **kwargs):
     """Plot BAF colored by allele-specific copy number state.
 
     Extracts data for a single cell from an AnnData object and plots B-allele
@@ -1450,8 +1529,8 @@ def plot_cell_ascn(adata, cell_id, ax=None, chromosome=None, region_mapper=None,
     ----------
     adata : anndata.AnnData
         copy number anndata with layers BAF, A, B, state, copy
-    cell_id : str
-        cell from adata.obs.index to plot
+    obs_id : str
+        observation from adata.obs.index to plot
     ax : matplotlib.axes.Axes, optional
         axes on which to plot, by default current axes
     chromosome : str, optional
@@ -1469,7 +1548,7 @@ def plot_cell_ascn(adata, cell_id, ax=None, chromosome=None, region_mapper=None,
 
     plot_data = get_obs_data(
         adata,
-        cell_id,
+        obs_id,
         layer_names=['copy', 'BAF', 'state', 'A', 'B']
     )
 
@@ -1495,6 +1574,18 @@ def plot_cell_ascn(adata, cell_id, ax=None, chromosome=None, region_mapper=None,
         ax.get_legend().set_title('AS CN state')
 
     return ax
+
+
+def plot_cell_ascn(adata, cell_id, ax=None, chromosome=None, region_mapper=None, **kwargs):
+    """Plot BAF colored by allele-specific copy number state.
+
+    .. deprecated::
+        Use `plot_ascn_profile`.
+    """
+    warn_renamed('plot_cell_ascn', 'plot_ascn_profile', stacklevel=2)
+    return plot_ascn_profile(
+        adata, obs_id=cell_id, ax=ax, chromosome=chromosome,
+        region_mapper=region_mapper, **kwargs)
 
 
 def plot_pseudobulk_tcn(adata, ax=None, chromosome=None, region_mapper=None, **kwargs):

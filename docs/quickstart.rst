@@ -132,21 +132,21 @@ conventions; UMAP coordinates land in ``obs`` as plain columns.
 Plot a copy number heatmap
 --------------------------
 
-:func:`~scgenome.pl.plot_cell_tcn_matrix` draws the copy-number matrix into a
-single axis. ``cell_order_fields`` takes a list of ``obs`` columns to sort rows
+:func:`~scgenome.pl.plot_tcn_heatmap` draws the copy-number matrix into a
+single axis. ``obs_order_fields`` takes a list of ``obs`` columns to sort rows
 by, applied left to right, so the call below groups cells by cluster and then
 orders within each cluster by hierarchical similarity.
 
 .. plot::
     :context: close-figs
 
-    scgenome.pl.plot_cell_tcn_matrix(
+    scgenome.pl.plot_tcn_heatmap(
         adata,
         layer_name='state',
-        cell_order_fields=['cluster_id', 'cell_order'],
+        obs_order_fields=['cluster_id', 'cell_order'],
     )
 
-:func:`~scgenome.pl.plot_cell_tcn_matrix_fig` builds a full figure instead:
+:func:`~scgenome.pl.plot_tcn_heatmap_fig` builds a full figure instead:
 heatmap, a legend, and annotation bars for any ``obs`` columns you name.
 Categorical and continuous columns are detected automatically and get
 appropriate colour scales.
@@ -154,10 +154,10 @@ appropriate colour scales.
 .. plot::
     :context: close-figs
 
-    g = scgenome.pl.plot_cell_tcn_matrix_fig(
+    g = scgenome.pl.plot_tcn_heatmap_fig(
         adata,
         layer_name='state',
-        cell_order_fields=['cluster_id', 'cell_order'],
+        obs_order_fields=['cluster_id', 'cell_order'],
         annotation_fields=['cluster_id', 'quality'],
     )
 
@@ -169,7 +169,7 @@ customize the result rather than rebuilding the plot.
 Plot a single cell profile
 --------------------------
 
-:func:`~scgenome.pl.plot_cn_profile` plots one cell along genomic coordinates,
+:func:`~scgenome.pl.plot_tcn_profile` plots one cell along genomic coordinates,
 with points positioned by a value layer and coloured by a state layer.
 
 .. plot::
@@ -177,7 +177,7 @@ with points positioned by a value layer and coloured by a state layer.
 
     cell_id = adata.obs.index[0]
 
-    scgenome.pl.plot_cn_profile(
+    scgenome.pl.plot_tcn_profile(
         adata,
         cell_id,
         value_layer_name='copy',

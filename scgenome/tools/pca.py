@@ -7,16 +7,18 @@ import numpy as np
 import scgenome.preprocessing.transform
 
 from anndata import AnnData
+from scgenome._deprecate import renamed_arguments
 
 
-def pca_loadings(adata: AnnData, layer=None, n_components=None, random_state=100) -> AnnData:
+@renamed_arguments(layer='layer_name')
+def pca_loadings(adata: AnnData, layer_name=None, n_components=None, random_state=100) -> AnnData:
     """ Compute PCA and store results in adata.
 
     Parameters
     ----------
     adata : AnnData
         Copy number or other cell matrix
-    layer : str, optional
+    layer_name : str, optional
         layer to use, by default None, use .X
     n_components : int, optional
         sklearn.decomposition.PCA n_components parameter, by default None
@@ -30,7 +32,7 @@ def pca_loadings(adata: AnnData, layer=None, n_components=None, random_state=100
 
     Reads
     -----
-    adata.layers[layer] : matrix to decompose (or adata.X if layer is None)
+    adata.layers[layer_name] : matrix to decompose (or adata.X if layer_name is None)
 
     Modifies
     --------
@@ -50,7 +52,7 @@ def pca_loadings(adata: AnnData, layer=None, n_components=None, random_state=100
 
     >>> import scgenome
     >>> adata = scgenome.datasets.OV2295_HMMCopy_reduced()
-    >>> adata = scgenome.tl.pca_loadings(adata, layer='copy', n_components=3)
+    >>> adata = scgenome.tl.pca_loadings(adata, layer_name='copy', n_components=3)
 
     Cell coordinates are cells by components, loadings are bins by components:
 
@@ -63,10 +65,10 @@ def pca_loadings(adata: AnnData, layer=None, n_components=None, random_state=100
     [0.605, 0.14, 0.082]
     """
 
-    if layer is None:
+    if layer_name is None:
         data = adata.X
     else:
-        data = adata.layers[layer]
+        data = adata.layers[layer_name]
 
     scaler = sklearn.preprocessing.StandardScaler()
     pca = sklearn.decomposition.PCA(n_components=n_components, random_state=random_state)
@@ -81,7 +83,7 @@ def pca_loadings(adata: AnnData, layer=None, n_components=None, random_state=100
     # Store PCA metadata
     adata.uns['pca'] = {
         'params': {
-            'layer': layer,
+            'layer': layer_name,
             'n_components': n_components,
             'random_state': random_state,
         },

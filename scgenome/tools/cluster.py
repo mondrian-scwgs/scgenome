@@ -15,6 +15,7 @@ from typing import Dict, Any, Union, Iterable
 
 import scgenome.preprocessing.transform
 from scgenome._validate import validate_adata
+from scgenome._deprecate import renamed_arguments
 
 
 def _compute_kmean_bic(kmeans, X):
@@ -66,14 +67,15 @@ def _gmm_diag_bic(X, k):
     return labels, bic
 
 
+@renamed_arguments(cell_ids='obs_ids', bin_ids='var_ids')
 def cluster_cells(
         adata: AnnData,
         layer_name: Union[None, str, Iterable[Union[None,str]]]='copy',
         method: str='kmeans_bic',
         min_k: int=2,
         max_k: int=100,
-        cell_ids: Iterable[str]=None,
-        bin_ids: Iterable[str]=None,
+        obs_ids: Iterable[str]=None,
+        var_ids: Iterable[str]=None,
         standardize: bool=False,
     ) -> AnnData:
     """ Cluster cells by copy number.
@@ -90,9 +92,9 @@ def cluster_cells(
         minimum number of clusters, by default 2
     max_k : int, optional
         maximum number of clusters, by default 100
-    cell_ids : str, optional
+    obs_ids : str, optional
         subset of cells to cluster, by default None
-    bin_ids : str, optional
+    var_ids : str, optional
         subset of bins to cluster, by default None
     standardize : bool
         standardize the data prior to clustering, by default False
@@ -144,20 +146,20 @@ def cluster_cells(
 
     """
     validate_adata(adata, caller='cluster_cells')
-    if cell_ids is None:
-        cell_ids = adata.obs.index
+    if obs_ids is None:
+        obs_ids = adata.obs.index
 
-    if bin_ids is None:
-        bin_ids = adata.var.index
+    if var_ids is None:
+        var_ids = adata.var.index
 
     min_k = min(adata.shape[0], min_k)
     max_k = min(adata.shape[0], max_k)
 
     def __get_layer(layer_name):
         if layer_name is not None:
-            return np.array(adata[cell_ids, bin_ids].layers[layer_name])
+            return np.array(adata[obs_ids, var_ids].layers[layer_name])
         else:
-            return np.array(adata[cell_ids, bin_ids].X)
+            return np.array(adata[obs_ids, var_ids].X)
 
     if isinstance(layer_name, (str, type(None))):
         X = __get_layer(layer_name)
@@ -194,7 +196,7 @@ def cluster_cells(
     logging.info(f'selected k={opt_k}')
     
     adata.obs['cluster_id'] = '-1'
-    adata.obs.loc[cell_ids, 'cluster_id'] = pd.Series(opt_label, index=adata.obs.loc[cell_ids].index).astype('str').astype('category')
+    adata.obs.loc[obs_ids, 'cluster_id'] = pd.Series(opt_label, index=adata.obs.loc[obs_ids].index).astype('str').astype('category')
     adata.obs['cluster_size'] = adata.obs.groupby('cluster_id')['cluster_id'].transform('size')
 
     # store information on the clustering parameters
@@ -205,8 +207,9 @@ def cluster_cells(
         min_k=min_k,
         max_k=max_k,
         layer_name=layer_name,
-        cell_ids=np.array(cell_ids),
-        bin_ids=np.array(bin_ids),
+        # these keys are persisted in the .h5ad, so they keep their names
+        cell_ids=np.array(obs_ids),
+        bin_ids=np.array(var_ids),
         standardize=standardize,
     )
 
@@ -284,13 +287,14 @@ def detect_outliers(
     return adata
 
 
+@renamed_arguments(cluster_col='cluster_field', cluster_size_col='cluster_size_field')
 def aggregate_clusters(
         adata: AnnData,
         agg_X: Any=None,
         agg_layers: Dict=None,
         agg_obs: Dict=None,
-        cluster_col: str='cluster_id',
-        cluster_size_col: str='cluster_size') -> AnnData:
+        cluster_field: str='cluster_id',
+        cluster_size_field: str='cluster_size') -> AnnData:
     """ Aggregate copy number by cluster to create cluster CN matrix
 
     Parameters
@@ -303,9 +307,9 @@ def aggregate_clusters(
         functions to aggregate layers keyed by layer names, by default None
     agg_obs : Dict, optional
         functions to aggregate obs data keyed by obs columns, by default None
-    cluster_col : str, optional
+    cluster_field : str, optional
         column with cluster ids, by default 'cluster_id'
-    cluster_size_col : str, optional
+    cluster_size_field : str, optional
         column that will be set to the size of each cluster, by default 'cluster_size'
 
     Returns
@@ -318,7 +322,7 @@ def aggregate_clusters(
         X = (
             adata
                 .to_df()
-                .set_index(adata.obs[cluster_col].astype(str))
+                .set_index(adata.obs[cluster_field].astype(str))
                 .groupby(level=0)
                 .agg(agg_X)
                 .sort_index())
@@ -335,15 +339,15 @@ def aggregate_clusters(
             layer_data[layer_name] = (
                 adata
                     .to_df(layer=layer_name)
-                    .set_index(adata.obs[cluster_col].astype(str))
+                    .set_index(adata.obs[cluster_field].astype(str))
                     .groupby(level=0)
                     .agg(agg_layers[layer_name])
                     .sort_index())
 
     obs_data = {}
-    obs_data[cluster_size_col] = (
+    obs_data[cluster_size_field] = (
         adata.obs
-            .set_index(adata.obs[cluster_col].astype(str))
+            .set_index(adata.obs[cluster_field].astype(str))
             .groupby(level=0)
             .size())
 
@@ -351,7 +355,7 @@ def aggregate_clusters(
         for obs_name in agg_obs:
             obs_data[obs_name] = (
                 adata.obs
-                    .set_index(adata.obs[cluster_col].astype(str))[obs_name]
+                    .set_index(adata.obs[cluster_field].astype(str))[obs_name]
                     .groupby(level=0)
                     .agg(agg_obs[obs_name])
                     .sort_index())
@@ -435,7 +439,7 @@ def aggregate_clusters_hmmcopy(adata: AnnData) -> AnnData:
         'total_reads': np.nansum,
     }
 
-    return aggregate_clusters(adata, agg_X, agg_layers, agg_obs, cluster_col='cluster_id')
+    return aggregate_clusters(adata, agg_X, agg_layers, agg_obs, cluster_field='cluster_id')
 
 
 def compute_umap(

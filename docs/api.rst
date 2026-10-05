@@ -152,12 +152,11 @@ Copy number heatmaps
 .. autosummary::
    :toctree: generated/
 
-   pl.plot_cell_tcn_matrix
-   pl.plot_cell_tcn_matrix_fig
-   pl.plot_cell_ascn_matrix
-   pl.plot_cell_ascn_matrix_fig
-   pl.plot_cell_matrix
-   pl.plot_cell_matrix_fig
+   pl.plot_tcn_heatmap
+   pl.plot_tcn_heatmap_fig
+   pl.plot_ascn_heatmap
+   pl.plot_ascn_heatmap_fig
+   pl.plot_heatmap_fig
 
 Drawing primitives and layout
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -184,10 +183,9 @@ Copy number profiles
 .. autosummary::
    :toctree: generated/
 
-   pl.plot_cn_profile
+   pl.plot_tcn_profile
+   pl.plot_ascn_profile
    pl.plot_profile
-   pl.plot_cell_tcn
-   pl.plot_cell_ascn
    pl.plot_pseudobulk_tcn
    pl.plot_pseudobulk_ascn
 

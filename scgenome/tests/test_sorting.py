@@ -109,7 +109,7 @@ def test_sort_clusters_on_several_layers(adata):
 
 def test_integer_cluster_column(adata):
     """ aggregate_clusters indexes by str(cluster id); the map back must agree """
-    result = scgenome.tl.sort_clusters(adata, cluster_col='int_cluster')
+    result = scgenome.tl.sort_clusters(adata, cluster_field='int_cluster')
 
     assert result.obs['cluster_order'].notnull().all()
     per_cluster = result.obs.groupby('int_cluster')['cluster_order'].nunique()
@@ -117,15 +117,15 @@ def test_integer_cluster_column(adata):
 
 
 def test_categorical_cluster_column(adata):
-    result = scgenome.tl.sort_clusters(adata, cluster_col='cat_cluster')
+    result = scgenome.tl.sort_clusters(adata, cluster_field='cat_cluster')
 
     assert result.obs['cluster_order'].notnull().all()
 
 
 def test_integer_and_string_cluster_columns_agree(adata):
     """ The same partition written two ways must sort the same """
-    by_str = scgenome.tl.sort_clusters(adata.copy(), cluster_col='cluster_id')
-    by_int = scgenome.tl.sort_clusters(adata.copy(), cluster_col='int_cluster')
+    by_str = scgenome.tl.sort_clusters(adata.copy(), cluster_field='cluster_id')
+    by_int = scgenome.tl.sort_clusters(adata.copy(), cluster_field='int_cluster')
 
     assert (by_str.obs['cluster_order'].values == by_int.obs['cluster_order'].values).all()
 
@@ -161,10 +161,10 @@ def test_caller_agg_layers_dict_is_not_modified(adata):
     assert list(agg_layers) == ['state']
 
 
-def test_cell_ids_subset_leaves_other_cells_null(adata):
+def test_obs_ids_subset_leaves_other_cells_null(adata):
     subset = adata.obs.index[:8]
 
-    result = scgenome.tl.sort_clusters(adata, cell_ids=subset)
+    result = scgenome.tl.sort_clusters(adata, obs_ids=subset)
 
     assert result.obs.loc[subset, 'cluster_order'].notnull().all()
     assert result.obs['cluster_order'].isnull().sum() == 4

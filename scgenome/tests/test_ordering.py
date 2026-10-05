@@ -343,13 +343,13 @@ def test_retained_linkage_round_trips_to_a_tree_and_catches_the_documented_idiom
 # --- plotting takes an ordering instead of computing its own -------------
 
 
-def test_cell_order_matches_cell_order_fields(adata):
+def test_obs_order_matches_obs_order_fields(adata):
     plt.figure()
-    by_fields = scgenome.pl.plot_heatmap(adata, cell_order_fields=['group', 'rank'])
+    by_fields = scgenome.pl.plot_heatmap(adata, obs_order_fields=['group', 'rank'])
 
     order = scgenome.tl.resolve_cell_order(adata, fields=['group', 'rank'])
     plt.figure()
-    by_order = scgenome.pl.plot_heatmap(adata, cell_order=order)
+    by_order = scgenome.pl.plot_heatmap(adata, obs_order=order)
 
     assert list(by_fields['adata'].obs.index) == list(by_order['adata'].obs.index)
     np.testing.assert_array_equal(
@@ -358,25 +358,25 @@ def test_cell_order_matches_cell_order_fields(adata):
     plt.close('all')
 
 
-def test_cell_order_and_cell_order_fields_are_mutually_exclusive(adata):
+def test_obs_order_and_obs_order_fields_are_mutually_exclusive(adata):
     plt.figure()
     with pytest.raises(ValueError, match='cannot provide both'):
         scgenome.pl.plot_heatmap(
-            adata, cell_order_fields=['group'], cell_order=list(adata.obs.index))
+            adata, obs_order_fields=['group'], obs_order=list(adata.obs.index))
     plt.close('all')
 
 
 def test_unknown_cells_in_cell_order_are_reported(adata):
     plt.figure()
     with pytest.raises(ValueError, match='not in adata'):
-        scgenome.pl.plot_heatmap(adata, cell_order=['c0', 'nope'])
+        scgenome.pl.plot_heatmap(adata, obs_order=['c0', 'nope'])
     plt.close('all')
 
 
 def test_tree_does_not_modify_the_caller_adata(adata, tree):
     before = list(adata.obs.columns)
 
-    scgenome.pl.plot_cell_matrix_fig(adata, layer_name='state', tree=tree, fig=plt.figure())
+    scgenome.pl.plot_heatmap_fig(adata, layer_name='state', tree=tree, fig=plt.figure())
 
     assert list(adata.obs.columns) == before
     assert 'phylo_order' not in adata.obs.columns
@@ -384,7 +384,7 @@ def test_tree_does_not_modify_the_caller_adata(adata, tree):
 
 
 def test_a_tree_orders_the_rows_by_its_leaves(adata, tree):
-    g = scgenome.pl.plot_cell_matrix_fig(
+    g = scgenome.pl.plot_heatmap_fig(
         adata, layer_name='state', tree=tree, fig=plt.figure())
 
     assert list(g['adata'].obs.index) == scgenome.tl.tree_leaf_order(tree)
@@ -395,9 +395,9 @@ def test_a_tree_and_sort_fields_together_are_refused(adata, tree):
     """ Reconciling them is align_tree_to_order, called by the user
     """
     with pytest.raises(ValueError, match='ordered one way'):
-        scgenome.pl.plot_cell_matrix_fig(
+        scgenome.pl.plot_heatmap_fig(
             adata, layer_name='state', tree=tree,
-            cell_order_fields=['group'], fig=plt.figure())
+            obs_order_fields=['group'], fig=plt.figure())
     plt.close('all')
 
 
@@ -405,7 +405,7 @@ def test_a_rotated_tree_is_how_fields_and_a_tree_are_combined(adata, tree):
     order = scgenome.tl.resolve_cell_order(adata, fields=['group', 'rank'])
     aligned = scgenome.tl.align_tree_to_order(tree, order)
 
-    g = scgenome.pl.plot_cell_matrix_fig(
+    g = scgenome.pl.plot_heatmap_fig(
         adata, layer_name='state', tree=aligned, fig=plt.figure())
 
     assert list(g['adata'].obs.index) == list(order)
@@ -416,7 +416,7 @@ def test_show_subsets_does_not_grow_the_callers_list():
     adata = scgenome.datasets.OV2295_HMMCopy_reduced()
     fields = ['cluster_id']
 
-    scgenome.pl.plot_cell_tcn_matrix_fig(
+    scgenome.pl.plot_tcn_heatmap_fig(
         adata, annotation_fields=fields, show_subsets=True, fig=plt.figure())
 
     assert fields == ['cluster_id']
@@ -497,5 +497,5 @@ def test_order_cells_by_groups_is_drawable_by_the_dendrogram_panel():
     order = scgenome.tl.order_cells_by_groups(adata, 'cluster_id')
 
     # would raise OrderConflict if the order cut across a merge
-    scgenome.pl.plot_dendrogram(adata, ax=plt.subplots()[1], cell_order=order)
+    scgenome.pl.plot_dendrogram(adata, ax=plt.subplots()[1], obs_order=order)
     plt.close('all')

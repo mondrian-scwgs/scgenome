@@ -9,6 +9,7 @@ from pyranges import PyRanges
 from collections.abc import Iterable
 
 from .ranges import dataframe_to_pyranges, pyranges_to_dataframe
+from scgenome._deprecate import renamed_arguments
 
 
 def read_ensemble_genes_gtf(gtf_filename) -> PyRanges:
@@ -106,7 +107,7 @@ def aggregate_genes(
 
     layer_data = {}
     for layer_name in agg_layers:
-        layer_data[layer_name] = _segment_width_weighted_mean_matrix(adata.to_df(layer=layer_name), intersect)
+        layer_data[layer_name] = _segment_width_weighted_mean_matrix(adata.to_df(layer_name=layer_name), intersect)
 
     var = _segment_width_weighted_mean_var(adata.var[agg_var], intersect)
 
@@ -123,11 +124,12 @@ def aggregate_genes(
     return adata
 
 
+@renamed_arguments(layer='layer_name')
 def get_gene_cn(
     adata: AnnData,
     genes: PyRanges,
     gene_name: str,
-    layer: str=None) -> pd.Series:
+    layer_name: str=None) -> pd.Series:
     """ Get copy number for a specific gene as a Series indexed by cell.
 
     Parameters
@@ -138,8 +140,8 @@ def get_gene_cn(
         gene data
     gene_name : str
         name of the gene to query
-    layer : str, optional
-        layer to use, by default None (uses X)
+    layer_name : str, optional
+        layer_name to use, by default None (uses X)
 
     Returns
     -------
@@ -149,9 +151,9 @@ def get_gene_cn(
     gene_pr = genes[genes.gene_name == gene_name]
     if gene_pr.empty:
         raise ValueError(f"Gene '{gene_name}' not found in genes")
-    gene_adata = aggregate_genes(adata, gene_pr, agg_layers=[layer] if layer else [])
-    if layer is not None:
-        values = gene_adata[:, 0].layers[layer].flatten()
+    gene_adata = aggregate_genes(adata, gene_pr, agg_layers=[layer_name] if layer_name else [])
+    if layer_name is not None:
+        values = gene_adata[:, 0].layers[layer_name].flatten()
     else:
         values = gene_adata[:, 0].X.flatten()
     return pd.Series(values, index=adata.obs.index, name=gene_name)

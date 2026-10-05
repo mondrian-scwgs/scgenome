@@ -12,7 +12,8 @@ def test_imports():
     import scgenome.tools.ranges
     import scgenome.tools.getters
 
-    print(scgenome.pl.plot_cn_profile)
+    print(scgenome.pl.plot_tcn_profile)
+    print(scgenome.pl.plot_ascn_profile)
     print(scgenome.pl.plot_profile)
     print(scgenome.pl.plot_heatmap)
     print(scgenome.pl.plot_obs_annotation)
@@ -21,11 +22,11 @@ def test_imports():
     print(scgenome.pl.plot_dendrogram)
     print(scgenome.pl.CellGrid)
     print(scgenome.pl.plot_cell_matrix)
-    print(scgenome.pl.plot_cell_matrix_fig)
-    print(scgenome.pl.plot_cell_tcn_matrix)
-    print(scgenome.pl.plot_cell_tcn_matrix_fig)
-    print(scgenome.pl.plot_cell_ascn_matrix)
-    print(scgenome.pl.plot_cell_ascn_matrix_fig)
+    print(scgenome.pl.plot_heatmap_fig)
+    print(scgenome.pl.plot_tcn_heatmap)
+    print(scgenome.pl.plot_tcn_heatmap_fig)
+    print(scgenome.pl.plot_ascn_heatmap)
+    print(scgenome.pl.plot_ascn_heatmap_fig)
     print(scgenome.pl.cn_legend)
     print(scgenome.pl.allele_state_legend)
     print(scgenome.pl.add_allele_state_layer)
@@ -39,6 +40,7 @@ def test_imports():
     print(scgenome.pp.read_dlp_hmmcopy)
     print(scgenome.pp.convert_dlp_hmmcopy)
     print(scgenome.pp.convert_dlp_signals)
+    print(scgenome.pp.read_dlp_signals)
     print(scgenome.pp.read_medicc2_cn)
     print(scgenome.pp.read_snv_genotyping)
 

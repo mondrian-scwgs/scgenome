@@ -6,7 +6,7 @@ arranges them into a composed figure, but nothing here depends on it and any of
 them works on its own.
 
 Two conventions make them compose. Rows are drawn in the order given by
-``cell_order``, with row ``i`` at ``y == i``, matching the row coordinates of
+``obs_order``, with row ``i`` at ``y == i``, matching the row coordinates of
 an imshow, so handing one order to several of them is enough to line their rows
 up. And each describes its legend rather than drawing it, see
 :mod:`scgenome.plotting.results`.
@@ -22,21 +22,22 @@ import pandas as pd
 from anndata import AnnData
 
 import scgenome.refgenome
+from scgenome._deprecate import renamed_arguments, warn_renamed
 from scgenome.tools.ordering import resolve_bin_order, resolve_cell_order
 from . import cn_colors
 from .cn_colors import map_categorical_colors
 from .results import LegendSpec, PanelResult
 
 
-def _ordered(adata, cell_order):
-    """ Rows of adata in cell_order, with blanks where a cell is absent
+def _ordered(adata, obs_order):
+    """ Rows of adata in obs_order, with blanks where a cell is absent
 
     Returns the reordered adata and a boolean mask of rows that exist, so a
     panel can leave the others empty rather than dropping them and falling out
     of step with the other panels.
     """
-    cell_order = pd.Index(cell_order)
-    positions = adata.obs.index.get_indexer(cell_order)
+    obs_order = pd.Index(obs_order)
+    positions = adata.obs.index.get_indexer(obs_order)
     present = positions >= 0
 
     return adata[positions[present]], present
@@ -49,18 +50,20 @@ def _blank_rows(values, present, fill=np.nan):
     return full
 
 
+@renamed_arguments(cell_order='obs_order', cell_order_fields='obs_order_fields',
+                   bin_order='var_order', show_cell_ids='show_obs_ids')
 def plot_heatmap(
         adata,
         layer_name=None,
         ax=None,
-        cell_order=None,
-        cell_order_fields=(),
-        bin_order=None,
+        obs_order=None,
+        obs_order_fields=(),
+        var_order=None,
         palette=None,
         cmap=None,
         vmin=None,
         vmax=None,
-        show_cell_ids=False,
+        show_obs_ids=False,
         style='black',
         rasterized=False,
         title=None,
@@ -76,13 +79,13 @@ def plot_heatmap(
         layer to draw, None for X
     ax : matplotlib.axes.Axes, optional
         axes to draw into, by default the current axes
-    cell_order : pandas.Index, optional
+    obs_order : pandas.Index, optional
         cell ids in row order, by default the existing obs order
-    cell_order_fields : list, optional
+    obs_order_fields : list, optional
         obs columns to sort rows on, sugar for
         ``resolve_cell_order(adata, fields=...)``. Mutually exclusive with
-        ``cell_order``.
-    bin_order : pandas.Index, optional
+        ``obs_order``.
+    var_order : pandas.Index, optional
         bin ids in column order, by default genomic order
     palette : str or dict, optional
         discrete palette, mutually exclusive with cmap
@@ -90,7 +93,7 @@ def plot_heatmap(
         continuous colormap, mutually exclusive with palette
     vmin, vmax : float, optional
         data range the colormap covers
-    show_cell_ids : bool, optional
+    show_obs_ids : bool, optional
         label rows with cell ids, by default False
     style : str, optional
         'black' or 'white' chromosome dividers and spines, by default 'black'
@@ -101,7 +104,7 @@ def plot_heatmap(
     genome : str or RefGenomeInfo, optional
         genome version, by default resolved from adata
     on_missing : str, optional
-        what to do with a cell in ``cell_order`` that is not in ``adata``:
+        what to do with a cell in ``obs_order`` that is not in ``adata``:
         'raise', or 'blank' to draw an empty row. A panel carrying its own
         AnnData wants 'blank', since a shared order spans cells it may not
         have; a panel over the order's own AnnData wants 'raise', since a
@@ -120,39 +123,39 @@ def plot_heatmap(
     if ax is None:
         ax = plt.gca()
 
-    if cell_order is not None and len(cell_order_fields) > 0:
+    if obs_order is not None and len(obs_order_fields) > 0:
         raise ValueError(
-            'cannot provide both cell_order and cell_order_fields, '
-            'cell_order_fields is sugar for resolve_cell_order(adata, fields=...)')
+            'cannot provide both obs_order and obs_order_fields, '
+            'obs_order_fields is sugar for resolve_cell_order(adata, fields=...)')
 
-    if cell_order is None and len(cell_order_fields) > 0:
-        cell_order = resolve_cell_order(adata, fields=cell_order_fields)
+    if obs_order is None and len(obs_order_fields) > 0:
+        obs_order = resolve_cell_order(adata, fields=obs_order_fields)
 
     genome_info = scgenome.refgenome.get_genome_info(adata, genome=genome)
 
-    if bin_order is None:
-        bin_order = resolve_bin_order(adata, genome=genome_info)
+    if var_order is None:
+        var_order = resolve_bin_order(adata, genome=genome_info)
 
-    bin_positions = adata.var.index.get_indexer(pd.Index(bin_order))
+    bin_positions = adata.var.index.get_indexer(pd.Index(var_order))
     if (bin_positions < 0).any():
-        missing = pd.Index(bin_order)[bin_positions < 0]
+        missing = pd.Index(var_order)[bin_positions < 0]
         raise ValueError(
-            f'{len(missing)} bins in bin_order are not in adata, for instance '
+            f'{len(missing)} bins in var_order are not in adata, for instance '
             f'{list(missing[:3])}')
 
     adata = adata[:, bin_positions]
 
-    if cell_order is None:
-        cell_order = adata.obs.index
+    if obs_order is None:
+        obs_order = adata.obs.index
         present = np.ones(adata.shape[0], dtype=bool)
         ordered = adata
     else:
-        ordered, present = _ordered(adata, cell_order)
+        ordered, present = _ordered(adata, obs_order)
 
         if not present.all() and on_missing == 'raise':
-            absent = pd.Index(cell_order)[~present]
+            absent = pd.Index(obs_order)[~present]
             raise ValueError(
-                f'{len(absent)} cells in cell_order are not in adata, for instance '
+                f'{len(absent)} cells in obs_order are not in adata, for instance '
                 f"{list(absent[:3])}. Pass on_missing='blank' to draw them as "
                 f'empty rows instead.')
 
@@ -211,9 +214,9 @@ def plot_heatmap(
     ax.set_xticklabels(chrom_names, fontsize='6')
     ax.set_xlabel('chromosome', fontsize=8)
 
-    if show_cell_ids:
-        ax.set(yticks=range(len(cell_order)))
-        ax.set(yticklabels=list(cell_order))
+    if show_obs_ids:
+        ax.set(yticks=range(len(obs_order)))
+        ax.set(yticklabels=list(obs_order))
         ax.tick_params(axis='y', labelrotation=0)
     else:
         ax.set(yticks=[])
@@ -285,7 +288,8 @@ def _annotation(values, ax, title, horizontal, cmap, style):
     return PanelResult(ax=ax, im=im, legend=legend, extras=extras)
 
 
-def plot_obs_annotation(adata, field, ax=None, cell_order=None, cmap=None,
+@renamed_arguments(cell_order='obs_order', cell_order_fields='obs_order_fields', bin_order='var_order')
+def plot_obs_annotation(adata, field, ax=None, obs_order=None, cmap=None,
                         style='black'):
     """ Draw a vertical bar of one obs column, one row per cell
 
@@ -297,7 +301,7 @@ def plot_obs_annotation(adata, field, ax=None, cell_order=None, cmap=None,
         obs column to draw
     ax : matplotlib.axes.Axes, optional
         axes to draw into, by default the current axes
-    cell_order : pandas.Index, optional
+    obs_order : pandas.Index, optional
         cell ids in row order, by default the existing obs order
     cmap : str or dict, optional
         colormap name for numeric columns, or a colormap name or level to
@@ -318,13 +322,14 @@ def plot_obs_annotation(adata, field, ax=None, cell_order=None, cmap=None,
             f'Available obs columns: {list(adata.obs.columns)}')
 
     values = adata.obs[field]
-    if cell_order is not None:
-        values = values.reindex(pd.Index(cell_order))
+    if obs_order is not None:
+        values = values.reindex(pd.Index(obs_order))
 
     return _annotation(values, ax, field, horizontal=False, cmap=cmap, style=style)
 
 
-def plot_var_annotation(adata, field, ax=None, bin_order=None, cmap=None,
+@renamed_arguments(cell_order='obs_order', cell_order_fields='obs_order_fields', bin_order='var_order')
+def plot_var_annotation(adata, field, ax=None, var_order=None, cmap=None,
                         style='black'):
     """ Draw a horizontal bar of one var column, one column per bin
 
@@ -336,7 +341,7 @@ def plot_var_annotation(adata, field, ax=None, bin_order=None, cmap=None,
         var column to draw
     ax : matplotlib.axes.Axes, optional
         axes to draw into, by default the current axes
-    bin_order : pandas.Index, optional
+    var_order : pandas.Index, optional
         bin ids in column order, by default genomic order
     cmap : str or dict, optional
         colormap name, or a level to color mapping for categorical columns
@@ -356,24 +361,26 @@ def plot_var_annotation(adata, field, ax=None, bin_order=None, cmap=None,
             f'Available var columns: {list(adata.var.columns)}')
 
     values = adata.var[field]
-    if bin_order is None:
-        bin_order = resolve_bin_order(adata)
-    values = values.reindex(pd.Index(bin_order))
+    if var_order is None:
+        var_order = resolve_bin_order(adata)
+    values = values.reindex(pd.Index(var_order))
 
     return _annotation(values, ax, field, horizontal=True, cmap=cmap, style=style)
 
 
+@renamed_arguments(cell_order='obs_order', cell_order_fields='obs_order_fields',
+                   bin_order='var_order', show_cell_ids='show_obs_ids')
 def plot_cell_matrix(
         adata: AnnData,
         layer_name=None,
-        cell_order_fields=(),
-        cell_order=None,
+        obs_order_fields=(),
+        obs_order=None,
         ax=None,
         vmin=None,
         vmax=None,
         cmap=None,
         palette=None,
-        show_cell_ids=False,
+        show_obs_ids=False,
         style='black',
         rasterized=False):
     """ Plot a matrix of per cell values across the genome
@@ -391,13 +398,13 @@ def plot_cell_matrix(
         adata,
         layer_name=layer_name,
         ax=ax,
-        cell_order=cell_order,
-        cell_order_fields=cell_order_fields,
+        obs_order=obs_order,
+        obs_order_fields=obs_order_fields,
         palette=palette,
         cmap=cmap,
         vmin=vmin,
         vmax=vmax,
-        show_cell_ids=show_cell_ids,
+        show_obs_ids=show_obs_ids,
         style=style,
         rasterized=rasterized)
 
@@ -453,8 +460,8 @@ def _warn_if_not_integer(adata, layer_name):
         UserWarning, stacklevel=3)
 
 
-def plot_cell_tcn_matrix(adata: AnnData, layer_name='state', **kwargs):
-    """ Plot a total copy number matrix
+def plot_tcn_heatmap(adata: AnnData, layer_name='state', **kwargs):
+    """ Plot a total copy number heatmap
 
     Colors integer copy number states with the total copy number palette.
 
@@ -480,7 +487,7 @@ def plot_cell_tcn_matrix(adata: AnnData, layer_name='state', **kwargs):
 
         import scgenome
         adata = scgenome.datasets.OV2295_HMMCopy_reduced()
-        scgenome.pl.plot_cell_tcn_matrix(adata)
+        scgenome.pl.plot_tcn_heatmap(adata)
 
     """
     _warn_if_not_integer(adata, layer_name)
@@ -499,8 +506,8 @@ def _with_allele_state_layer(adata):
     return cn_colors.add_allele_state_layer(adata.copy())
 
 
-def plot_cell_ascn_matrix(adata: AnnData, **kwargs):
-    """ Plot an allele specific copy number matrix
+def plot_ascn_heatmap(adata: AnnData, **kwargs):
+    """ Plot an allele specific copy number heatmap
 
     Plots the allele specific state of each bin in each cell, colored by the
     allele state palette. Adds `layers['allele_state']` if not already present.
@@ -530,7 +537,7 @@ def plot_cell_ascn_matrix(adata: AnnData, **kwargs):
         import scgenome
         adata = scgenome.datasets.OV081_Signals_reduced()
         adata = adata[:, adata.var['has_allele_cn']]
-        scgenome.pl.plot_cell_ascn_matrix(adata, cell_order_fields=['cell_order'])
+        scgenome.pl.plot_ascn_heatmap(adata, obs_order_fields=['cell_order'])
 
     """
     return plot_heatmap(
@@ -562,17 +569,38 @@ def plot_cell_cn_matrix(adata: AnnData, layer_name='state', cmap=None, palette=N
     """ Plot a copy number matrix
 
     .. deprecated::
-        Use `plot_cell_tcn_matrix` for total copy number states,
-        `plot_cell_ascn_matrix` for allele specific states, or
+        Use `plot_tcn_heatmap` for total copy number states,
+        `plot_ascn_heatmap` for allele specific states, or
         `plot_heatmap` for any other values.
     """
     warnings.warn(
-        'plot_cell_cn_matrix is deprecated, use plot_cell_tcn_matrix for total copy '
+        'plot_cell_cn_matrix is deprecated, use plot_tcn_heatmap for total copy '
         'number states or plot_heatmap for other values',
         DeprecationWarning, stacklevel=2)
 
     return plot_heatmap(
         adata, **_deprecated_cn_matrix_args(layer_name, cmap, palette, raw), **kwargs)
+
+
+def plot_cell_tcn_matrix(adata: AnnData, layer_name='state', **kwargs):
+    """ Plot a total copy number matrix
+
+    .. deprecated::
+        Use `plot_tcn_heatmap`. The rows of an AnnData are not always cells,
+        and the heatmap functions now share one noun with `plot_heatmap`.
+    """
+    warn_renamed('plot_cell_tcn_matrix', 'plot_tcn_heatmap', stacklevel=2)
+    return plot_tcn_heatmap(adata, layer_name=layer_name, **kwargs)
+
+
+def plot_cell_ascn_matrix(adata: AnnData, **kwargs):
+    """ Plot an allele specific copy number matrix
+
+    .. deprecated::
+        Use `plot_ascn_heatmap`.
+    """
+    warn_renamed('plot_cell_ascn_matrix', 'plot_ascn_heatmap', stacklevel=2)
+    return plot_ascn_heatmap(adata, **kwargs)
 
 
 # Adapted from: https://github.com/bernatgel/karyoploteR/blob/master/R/color.R

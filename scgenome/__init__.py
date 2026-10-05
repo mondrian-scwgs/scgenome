@@ -26,8 +26,8 @@ Quick start::
     adata = scgenome.pp.filter_cells(adata)
     adata = scgenome.tl.cluster_cells(adata, layer_name='copy')
     adata = scgenome.tl.sort_cells(adata, layer_name='copy')
-    scgenome.pl.plot_cell_tcn_matrix(adata, layer_name='state',
-                                    cell_order_fields=['cell_order'])
+    scgenome.pl.plot_tcn_heatmap(adata, layer_name='state',
+                                 obs_order_fields=['cell_order'])
 """
 
 from . import tools as tl

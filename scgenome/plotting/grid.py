@@ -18,6 +18,7 @@ from typing import Any, Callable, List
 import matplotlib.pyplot as plt
 import pandas as pd
 
+from scgenome._deprecate import renamed_arguments, warn_renamed
 from scgenome.tools.ordering import resolve_cell_order, tree_leaf_order
 from . import heatmap as _heatmap
 from . import phylo as _phylo
@@ -58,7 +59,7 @@ class GridResult:
         :class:`~scgenome.pl.PanelResult` keyed by panel name
     legends : dict
         drawn legend elements keyed by legend title
-    cell_order : pandas.Index
+    obs_order : pandas.Index
         the row order every panel was drawn in
     """
 
@@ -66,7 +67,13 @@ class GridResult:
     axes: dict = field(default_factory=dict)
     panels: dict = field(default_factory=dict)
     legends: dict = field(default_factory=dict)
-    cell_order: Any = None
+    obs_order: Any = None
+
+    @property
+    def cell_order(self):
+        """ Deprecated alias for :attr:`obs_order`. """
+        warn_renamed('GridResult.cell_order', 'GridResult.obs_order')
+        return self.obs_order
 
     def __getitem__(self, key):
         return getattr(self, key)
@@ -80,14 +87,14 @@ class CellGrid:
     adata : AnnData
         per cell data, not modified. Panels may carry their own AnnData, which
         is reindexed to this object's row order.
-    cell_order_fields : list, optional
+    obs_order_fields : list, optional
         obs columns to sort rows on, first is primary
-    cell_order : pandas.Index, optional
+    obs_order : pandas.Index, optional
         explicit cell ids in row order, mutually exclusive with
-        ``cell_order_fields``
+        ``obs_order_fields``
     tree : Bio.Phylo.BaseTree.Tree, optional
         tree whose leaf order becomes the row order. Mutually exclusive with
-        ``cell_order`` and ``cell_order_fields``: a tree already is an order,
+        ``obs_order`` and ``obs_order_fields``: a tree already is an order,
         and making one agree with a different one is
         :func:`~scgenome.tl.align_tree_to_order`, called explicitly. Does not
         itself add a tree panel, use :meth:`add_tree` for that.
@@ -109,7 +116,7 @@ class CellGrid:
         adata = scgenome.datasets.OV2295_HMMCopy_reduced()
         adata = scgenome.tl.sort_cells(adata, layer_name='copy')
 
-        g = (scgenome.pl.CellGrid(adata, cell_order_fields=['cell_order'], figsize=(12, 5))
+        g = (scgenome.pl.CellGrid(adata, obs_order_fields=['cell_order'], figsize=(12, 5))
              .add_dendrogram()
              .add_heatmap('state', palette='cn', name='Total CN')
              .add_heatmap('copy', cmap='viridis', vmin=0, vmax=4, name='Copy')
@@ -118,13 +125,14 @@ class CellGrid:
 
     """
 
-    def __init__(self, adata, cell_order_fields=None, cell_order=None, tree=None,
+    @renamed_arguments(cell_order='obs_order', cell_order_fields='obs_order_fields', bin_order='var_order')
+    def __init__(self, adata, obs_order_fields=None, obs_order=None, tree=None,
                  figsize=None, fig=None, style='black'):
         given = []
-        if cell_order is not None:
-            given.append('cell_order')
-        if cell_order_fields:
-            given.append('cell_order_fields')
+        if obs_order is not None:
+            given.append('obs_order')
+        if obs_order_fields:
+            given.append('obs_order_fields')
         if tree is not None:
             given.append('tree')
 
@@ -140,11 +148,11 @@ class CellGrid:
         self.fig = fig
 
         if tree is not None:
-            self.cell_order = pd.Index(tree_leaf_order(tree))
-        elif cell_order is not None:
-            self.cell_order = pd.Index(cell_order)
+            self.obs_order = pd.Index(tree_leaf_order(tree))
+        elif obs_order is not None:
+            self.obs_order = pd.Index(obs_order)
         else:
-            self.cell_order = resolve_cell_order(adata, fields=cell_order_fields)
+            self.obs_order = resolve_cell_order(adata, fields=obs_order_fields)
 
         self._panels = []
         self._tree = tree
@@ -203,7 +211,7 @@ class CellGrid:
 
         def draw(ax, _source=source, _layer=layer, _title=legend_title, _kwargs=kwargs):
             return _heatmap.plot_heatmap(
-                _source, layer_name=_layer, ax=ax, cell_order=self.cell_order,
+                _source, layer_name=_layer, ax=ax, obs_order=self.obs_order,
                 style=self.style, title=_title, **_kwargs)
 
         return self._add(_Panel('heatmap', name, width, draw))
@@ -234,7 +242,7 @@ class CellGrid:
 
             def draw(ax, _f=f, _cmap=cmap.get(f)):
                 return _heatmap.plot_obs_annotation(
-                    self.adata, _f, ax=ax, cell_order=self.cell_order,
+                    self.adata, _f, ax=ax, obs_order=self.obs_order,
                     cmap=_cmap, style=self.style)
 
             self._add(_Panel('obs_annotation', name, width, draw))
@@ -305,11 +313,11 @@ class CellGrid:
             raise ValueError('no tree given, pass one here or to CellGrid')
 
         leaves = tree_leaf_order(tree)
-        if leaves != list(self.cell_order):
+        if leaves != list(self.obs_order):
             raise ValueError(
                 "this tree's leaves are not the grid's row order, so drawing it "
                 'would imply groupings that are not there. Rotate it first with '
-                'scgenome.tl.align_tree_to_order(tree, grid.cell_order), or build '
+                'scgenome.tl.align_tree_to_order(tree, grid.obs_order), or build '
                 'the grid from the tree with CellGrid(adata, tree=tree).')
 
         name = self._unique_name(name)
@@ -346,7 +354,7 @@ class CellGrid:
 
         def draw(ax, _key=key, _kwargs=kwargs):
             return _phylo.plot_dendrogram(
-                self.adata, ax=ax, cell_order=self.cell_order, key=_key, **_kwargs)
+                self.adata, ax=ax, obs_order=self.obs_order, key=_key, **_kwargs)
 
         return self._add(_Panel('dendrogram', name, width, draw))
 
@@ -399,7 +407,7 @@ class CellGrid:
         for ax in axes.flatten():
             ax.set_axis_off()
 
-        result = GridResult(fig=fig, cell_order=self.cell_order)
+        result = GridResult(fig=fig, obs_order=self.obs_order)
         result.axes['_grid'] = axes
 
         specs = []
