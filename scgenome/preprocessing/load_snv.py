@@ -16,8 +16,10 @@ def read_snv_genotyping(filename: str) -> AnnData:
     Returns
     -------
     AnnData
-        SNV matrix with alt_count in X and ref_count in layers['ref_count']
-    """    
+        SNV counts in layers['alt_count'] and layers['ref_count'], with X unset
+        Cells and variants retain their first-occurrence order. Missing pairs
+        have zero counts, and duplicate cell-variant rows are summed.
+    """
 
     data = pd.read_csv(filename, dtype={
         'chromosome': 'category',
@@ -25,36 +27,34 @@ def read_snv_genotyping(filename: str) -> AnnData:
         'alt': 'category',
         'cell_id': 'category'})
 
-    data['snv_idx'] = data.groupby(['chromosome', 'position', 'ref', 'alt'], observed=True).ngroup()
+    obs = data[['cell_id']].drop_duplicates().set_index('cell_id')
+    variant_columns = ['chromosome', 'position', 'ref', 'alt']
+    var = data[variant_columns].drop_duplicates()
+    variant_index = pd.MultiIndex.from_frame(var)
+    cell_coordinates = obs.index.get_indexer(data['cell_id'])
+    variant_coordinates = variant_index.get_indexer(
+        pd.MultiIndex.from_frame(data[variant_columns]))
 
-    alt_counts_matrix = csr_matrix(
-        (data['alt_count'], (data['cell_id'].cat.codes, data['snv_idx'].values)),
-        shape=(data['cell_id'].cat.categories.size, data['snv_idx'].max() + 1))
+    layers = {
+        count_column: csr_matrix(
+            (pd.to_numeric(data[count_column]).to_numpy(), (cell_coordinates, variant_coordinates)),
+            shape=(len(obs), len(var)))
+        for count_column in ['alt_count', 'ref_count']
+    }
 
-    ref_counts_matrix = csr_matrix(
-        (data['ref_count'], (data['cell_id'].cat.codes, data['snv_idx'].values)),
-        shape=(data['cell_id'].cat.categories.size, data['snv_idx'].max() + 1))
-
-    obs = data[['cell_id']].drop_duplicates()
-    obs['cell_idx'] = obs['cell_id'].cat.codes
-    obs = obs.sort_values('cell_idx').set_index('cell_id').drop('cell_idx', axis=1)
-
-    var = data[['snv_idx', 'chromosome', 'position', 'ref', 'alt']].drop_duplicates()
+    obs.index = obs.index.astype(str)
     var['snv_id'] = (
-        var['chromosome'].astype(str) + '_' +
-        var['position'].astype(str) + '_' +
-        var['ref'].astype(str) + '_' +
+        var['chromosome'].astype(str) + '-' +
+        var['position'].astype(str) + ':' +
+        var['ref'].astype(str) + '>' +
         var['alt'].astype(str))
-    var = var.sort_values('snv_idx').set_index('snv_id')
-    assert (var['snv_idx'].values == range(len(var.index))).all()
+    var = var.set_index('snv_id')
 
     adata = ad.AnnData(
-        alt_counts_matrix,
-        obs,
-        var,
-        layers={
-            'ref_count': ref_counts_matrix,
-        }
+        X=None,
+        obs=obs,
+        var=var,
+        layers=layers,
     )
-    
+
     return adata

@@ -6,7 +6,7 @@ import pyranges as pr
 
 from anndata import AnnData
 from pyranges import PyRanges
-from typing import Dict, Sequence
+from typing import Dict, Optional, Sequence
 from pandas import DataFrame
 
 from ..utils import union_categories
@@ -28,20 +28,74 @@ def read_dlp_hmmcopy(reads_filename, metrics_filename) -> AnnData:
         An instantiated AnnData Object.
     """
 
-    cn_data = csverve.read_csv(reads_filename, dtype={'chr': str, 'cell_id': str})
+    cn_data = pd.read_csv(reads_filename, dtype={'chr': str, 'cell_id': str}, low_memory=False)
     cn_data['chr'] = cn_data['chr'].astype(str).astype('category')
 
-    metrics_data = csverve.read_csv(metrics_filename, dtype={'cell_id': str})
+    metrics_data = pd.read_csv(metrics_filename, dtype={'cell_id': str}, low_memory=False)
 
     union_categories([cn_data, metrics_data])
 
     return convert_dlp_hmmcopy(metrics_data, cn_data)
 
 
+def read_dlp_signals(hscn_filename) -> AnnData:
+    """ Read signals results from the DLP pipeline.
+
+    Parameters
+    ----------
+    hscn_filename : str
+        dlp pipeline signals filename
+
+    Returns
+    -------
+    AnnData
+        An instantiated AnnData Object.
+    """
+
+    hscn_dtype = {
+        'cell_id': 'category',
+        'chr': 'category',
+        'state_AS_phased': 'category',
+        'state_AS': 'category',
+        'phase': 'category',
+        'state_phase': 'category',
+    }
+
+    hscn = pd.read_csv(hscn_filename, dtype=hscn_dtype)
+
+    layers_columns = [
+        'totalcounts',
+        'alleleA',
+        'alleleB',
+        'BAF',
+        'A',
+        'B',
+    ]
+
+    bin_metrics_columns = [
+        'chr',
+        'start',
+        'end',
+    ]
+
+    bin_metrics_data = hscn[bin_metrics_columns].drop_duplicates()
+    cell_metrics_data = hscn[['cell_id']].drop_duplicates()
+
+    # Create anndata from signals input
+    adata = create_cn_anndata(
+        hscn,
+        layers_columns=layers_columns,
+        cell_metrics_data=cell_metrics_data,
+        bin_metrics_data=bin_metrics_data,
+    )
+
+    return adata
+
+
 def create_cn_anndata(
         cn_data: DataFrame,
-        X_column: str,
-        layers_columns: Sequence[str],
+        X_column: Optional[str]=None,
+        layers_columns: Sequence[str]=(),
         cell_metrics_data: DataFrame=None,
         bin_metrics_data: DataFrame=None,
     ) -> AnnData:
@@ -50,11 +104,12 @@ def create_cn_anndata(
     Parameters
     ----------
     cn_data : DataFrame
-        copy number data per cell in long format
-    X_column : str
-        column of cn_data to use for X
+        copy number data per cell in long format; cells and observed bins
+        retain their first-occurrence order, with missing cell-bin pairs as NaN
+    X_column : str or None
+        column of cn_data to use for X, or None to leave X unset
     layers_columns : Sequence[str]
-        columns of cn_data to use for lauers
+        columns of cn_data to use for layers; may be empty if X_column is set
     cell_metrics_data : DataFrame, optional
         per cell metrics data, by default None
     bin_metrics_data : DataFrame, optional
@@ -68,8 +123,12 @@ def create_cn_anndata(
     Raises
     ------
     ValueError
-        duplicate data or otherwise incompatible inputs
+        neither X_column nor layers_columns is provided, duplicate data,
+        or otherwise incompatible inputs
     """
+    if X_column is None and not layers_columns:
+        raise ValueError('X_column or at least one layer column must be provided')
+
     if cell_metrics_data is None:
         cell_metrics_data = cn_data[['cell_id']].drop_duplicates()
 
@@ -83,32 +142,27 @@ def create_cn_anndata(
     assert not cell_metrics_data.duplicated(subset=['cell_id']).any()
     assert not bin_metrics_data.duplicated(subset=['chr', 'start', 'end']).any()
 
-    X = (
-        cn_data
-            .set_index(['chr', 'start', 'end', 'cell_id'])[X_column]
-            .unstack(level='cell_id')
-            .transpose())
-    X.index = X.index.astype(str)
-
-    chr_start_end_index = X.columns
-    bin_index = pd.Series(
-        X.columns.get_level_values('chr').astype(str) + ':' +
-        X.columns.get_level_values('start').astype(str) + '-' +
-        X.columns.get_level_values('end').astype(str),
+    cell_index = pd.Index(cn_data['cell_id'].drop_duplicates(), name='cell_id')
+    chr_start_end_index = pd.MultiIndex.from_frame(
+        cn_data[['chr', 'start', 'end']].drop_duplicates())
+    bin_index = pd.Index(
+        chr_start_end_index.get_level_values('chr').astype(str) + ':' +
+        chr_start_end_index.get_level_values('start').astype(str) + '-' +
+        chr_start_end_index.get_level_values('end').astype(str),
         name='bin')
 
-    X = X.set_axis(bin_index, axis=1, copy=False)
+    indexed_cn_data = cn_data.set_index(['chr', 'start', 'end', 'cell_id'])
 
-    layers = {}
-    for layer_name in layers_columns:
-        layers[layer_name] = (
-            cn_data
-                .set_index(['chr', 'start', 'end', 'cell_id'])[layer_name]
+    def aligned_matrix(column: str) -> np.ndarray:
+        return (
+            indexed_cn_data[column]
                 .unstack(level='cell_id')
                 .transpose()
-                .reindex(index=X.index, columns=chr_start_end_index)
-                .set_axis(bin_index, axis=1, copy=False))
-        layers[layer_name].index = layers[layer_name].index.astype(str)
+                .reindex(index=cell_index, columns=chr_start_end_index)
+                .to_numpy())
+
+    X = aligned_matrix(X_column) if X_column is not None else None
+    layers = {layer_name: aligned_matrix(layer_name) for layer_name in layers_columns}
 
     bin_data = (
         bin_metrics_data
@@ -119,14 +173,11 @@ def create_cn_anndata(
     cell_data = (
         cell_metrics_data
             .set_index(['cell_id'])
-            .reindex(X.index))
+            .reindex(cell_index))
     cell_data.index = cell_data.index.astype(str)
 
-    if X.empty:
-        X = np.empty((0, 0), dtype=float)
-
     adata = ad.AnnData(
-        X,
+        X=X,
         obs=cell_data,
         var=bin_data,
         layers=layers,
