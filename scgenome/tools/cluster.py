@@ -25,27 +25,48 @@ def _compute_kmean_bic(kmeans, X):
         X: data for which to calculate bic
     
     Returns:
-        float: bic
-    
+        float: bic; -inf if k is too large for the data, +inf if the fit is exact
+
     Reference: https://stats.stackexchange.com/questions/90769/using-bic-to-estimate-the-number-of-k-in-kmeans
     """
-    centers = [kmeans.cluster_centers_]
+    centers = kmeans.cluster_centers_
     labels = kmeans.labels_
     n_clusters = kmeans.n_clusters
-    cluster_sizes = np.bincount(labels)
     N, d = X.shape
 
+    # The pooled variance below has N - n_clusters degrees of freedom, so that
+    # many clusters says nothing about the data. Lose the argmax rather than
+    # dividing by zero.
+    if n_clusters >= N:
+        return -np.inf
+
+    # bincount runs to the largest label used, which is short of n_clusters
+    # whenever kmeans leaves a cluster empty. Empty clusters contribute no
+    # cells but would take log(0) below, so every sum here skips them.
+    cluster_sizes = np.bincount(labels, minlength=n_clusters)
+    nonempty = np.flatnonzero(cluster_sizes)
+
     # Compute variance for all clusters
-    cl_var = (1.0 / (N - n_clusters) / d) * sum(
-        [sum(scipy.spatial.distance.cdist(X[np.where(labels == i)], [centers[0][i]],
-                                          'euclidean') ** 2) for i in range(n_clusters)])
+    sum_sq_dist = np.sum([
+        np.sum(scipy.spatial.distance.cdist(
+            X[labels == i], [centers[i]], 'euclidean') ** 2)
+        for i in nonempty])
+    cl_var = float(sum_sq_dist) / (N - n_clusters) / d
+
+    # Zero pooled variance means every cell sits exactly on its centroid, which
+    # happens on duplicated rows (integer state profiles, say) once k is large
+    # enough to separate them. The fit is exact, so the likelihood diverges;
+    # report that rather than taking log(0). argmax keeps the first maximum, so
+    # the smallest k that fits exactly is the one selected.
+    if cl_var <= 0:
+        return np.inf
 
     const_term = 0.5 * n_clusters * np.log(N) * (d + 1)
 
     bic = np.sum([cluster_sizes[i] * np.log(cluster_sizes[i]) -
                   cluster_sizes[i] * np.log(N) -
                   ((cluster_sizes[i] * d) / 2) * np.log(2 * np.pi * cl_var) -
-                  ((cluster_sizes[i] - 1) * d / 2) for i in range(n_clusters)]) - const_term
+                  ((cluster_sizes[i] - 1) * d / 2) for i in nonempty]) - const_term
 
     return bic
 
@@ -115,8 +136,9 @@ def cluster_cells(
     Notes
     -----
     Every k from `min_k` to `max_k` is fit and the one with the best BIC is
-    kept, so runtime scales with `max_k`. Both bounds are clamped to the number
-    of cells.
+    kept, so runtime scales with `max_k`. Both bounds are clamped to one below
+    the number of cells being clustered: the BIC of a fit with as many clusters
+    as cells is undefined, since nothing is left to estimate the variance from.
 
     Examples
     --------
@@ -150,9 +172,6 @@ def cluster_cells(
     if bin_ids is None:
         bin_ids = adata.var.index
 
-    min_k = min(adata.shape[0], min_k)
-    max_k = min(adata.shape[0], max_k)
-
     def __get_layer(layer_name):
         if layer_name is not None:
             return np.array(adata[cell_ids, bin_ids].layers[layer_name])
@@ -167,9 +186,20 @@ def cluster_cells(
         raise ValueError(f'layer_name was {layer_name}')
 
     X = scgenome.preprocessing.transform.fill_missing(X)
-    
+
     if standardize:
         X = sklearn.preprocessing.StandardScaler().fit_transform(X)
+
+    # The BIC of a k means fit needs at least one degree of freedom left for
+    # the pooled variance, so the sweep stops one short of the cell count.
+    # Clamp against the cells actually being clustered, not all of adata, since
+    # cell_ids may be a subset.
+    n_cells = X.shape[0]
+    if n_cells < 2:
+        raise ValueError(f'cluster_cells needs at least 2 cells, got {n_cells}')
+
+    max_k = min(n_cells - 1, max_k)
+    min_k = min(max_k, min_k)
 
     ks = range(min_k, max_k + 1)
 
