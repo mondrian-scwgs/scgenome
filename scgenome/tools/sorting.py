@@ -8,6 +8,7 @@ from anndata import AnnData
 from typing import Union, Any, Dict, Iterable
 
 import scgenome.preprocessing.transform
+from scgenome._deprecate import renamed_arguments
 
 
 def _default_agg_fn(values):
@@ -57,7 +58,8 @@ def _resolve_cluster_aggregation(adata, layer_name, agg_X, agg_layers):
     return agg_X, agg_layers
 
 
-def store_linkage(adata, key, linkage, leaves, ids, layer=None,
+@renamed_arguments(layer='layer_name')
+def store_linkage(adata, key, linkage, leaves, ids, layer_name=None,
                   metric='cityblock', method='complete', standardize=False):
     """ Record the hierarchical clustering behind an ordering
 
@@ -78,7 +80,7 @@ def store_linkage(adata, key, linkage, leaves, ids, layer=None,
         leaf indices into ``ids``, in dendrogram order
     ids : numpy.ndarray
         labels the linkage rows refer to, in adata order
-    layer : str, optional
+    layer_name : str, optional
         layer the distances were computed on, None for X
     metric, method : str, optional
         arguments the linkage was built with
@@ -93,18 +95,19 @@ def store_linkage(adata, key, linkage, leaves, ids, layer=None,
         'linkage': linkage,
         'leaves': np.asarray(leaves),
         'ids': np.asarray(ids),
-        'layer': layer,
+        'layer': layer_name,  # persisted key, keeps its name
         'metric': metric,
         'method': method,
         'standardize': standardize,
     }
 
 
+@renamed_arguments(cell_ids='obs_ids', bin_ids='var_ids')
 def sort_cells(
         adata: AnnData,
         layer_name: Union[None, str, Iterable[Union[None,str]]]='copy',
-        cell_ids: Iterable[str]=None,
-        bin_ids: Iterable[str]=None,
+        obs_ids: Iterable[str]=None,
+        var_ids: Iterable[str]=None,
         standardize: bool=False,
     ) -> AnnData:
     """ Sort cells by hierarchical clustering on copy number values.
@@ -115,9 +118,9 @@ def sort_cells(
         copy number data
     layer_name : str, optional
         layer with copy number data to use for sorting, None for X, by default 'copy'
-    cell_ids : str, optional
+    obs_ids : str, optional
         subset of cells to cluster, by default None
-    bin_ids : str, optional
+    var_ids : str, optional
         subset of bins to cluster, by default None
     standardize : bool
         standardize the data prior to sorting, by default False
@@ -141,7 +144,7 @@ def sort_cells(
     -----
     The rows of `adata` are not reordered. `cell_order` is a column that
     plotting functions sort on, so several orderings can coexist on one object
-    and can be combined for a nested sort. If `cell_ids` restricts the sort to a
+    and can be combined for a nested sort. If `obs_ids` restricts the sort to a
     subset, cells outside it get `NaN`.
 
     Examples
@@ -159,25 +162,25 @@ def sort_cells(
     Combine with a cluster assignment to group cells first and order within
     each group second::
 
-        scgenome.pl.plot_cell_tcn_matrix(
-            adata, cell_order_fields=['cluster_id', 'cell_order'])
+        scgenome.pl.plot_tcn_heatmap(
+            adata, obs_order_fields=['cluster_id', 'cell_order'])
 
     """
-    if cell_ids is None:
-        cell_ids = adata.obs.index
+    if obs_ids is None:
+        obs_ids = adata.obs.index
 
-    if bin_ids is None:
-        bin_ids = adata.var.index
+    if var_ids is None:
+        var_ids = adata.var.index
 
-    if len(cell_ids) <= 1:
+    if len(obs_ids) <= 1:
         adata.obs['cell_order'] = 0.
         return adata
 
     def __get_layer(layer_name):
         if layer_name is not None:
-            return np.array(adata[cell_ids, bin_ids].layers[layer_name])
+            return np.array(adata[obs_ids, var_ids].layers[layer_name])
         else:
-            return np.array(adata[cell_ids, bin_ids].X)
+            return np.array(adata[obs_ids, var_ids].X)
 
     if isinstance(layer_name, (str, type(None))):
         X = __get_layer(layer_name)
@@ -199,26 +202,27 @@ def sort_cells(
     ordering[idx] = np.arange(idx.shape[0])
 
     adata.obs['cell_order'] = np.nan
-    adata.obs.loc[cell_ids, 'cell_order'] = pd.Series(ordering, index=adata.obs.loc[cell_ids].index)
+    adata.obs.loc[obs_ids, 'cell_order'] = pd.Series(ordering, index=adata.obs.loc[obs_ids].index)
 
     # The linkage describes the structure the ordering flattens, and a
     # dendrogram cannot be drawn from the leaf order alone
     store_linkage(
         adata, 'cell_order', Y, idx,
-        np.asarray(adata.obs.loc[cell_ids].index),
-        layer=layer_name, standardize=standardize)
+        np.asarray(adata.obs.loc[obs_ids].index),
+        layer_name=layer_name, standardize=standardize)
 
     return adata
 
 
+@renamed_arguments(cell_ids='obs_ids', bin_ids='var_ids', cluster_col='cluster_field')
 def sort_clusters(
         adata: AnnData,
         layer_name: Union[None, str, Iterable[Union[None,str]]]='copy',
-        cluster_col: str='cluster_id',
+        cluster_field: str='cluster_id',
         agg_X: Any=None,
         agg_layers: Dict=None,
-        cell_ids: Iterable[str]=None,
-        bin_ids: Iterable[str]=None,
+        obs_ids: Iterable[str]=None,
+        var_ids: Iterable[str]=None,
         standardize: bool=False,
     ) -> AnnData:
     """ Sort clusters by hierarchical clustering on aggregated copy number values.
@@ -229,7 +233,7 @@ def sort_clusters(
         copy number data
     layer_name : str, optional
         layer with copy number data to use for sorting, None for X, by default 'copy'
-    cluster_col : str, optional
+    cluster_field : str, optional
         column of cluster labels to sort
     agg_X : Any
         function to aggregate X, by default None. Only needed when
@@ -239,9 +243,9 @@ def sort_clusters(
         Whatever ``layer_name`` names is aggregated regardless, since the sort
         reads it; a median for integer layers and a mean otherwise. Functions
         given here are used as supplied.
-    cell_ids : str, optional
+    obs_ids : str, optional
         subset of cells to cluster, by default None
-    bin_ids : str, optional
+    var_ids : str, optional
         subset of bins to cluster, by default None
     standardize : bool
         standardize the data prior to sorting, by default False
@@ -254,7 +258,7 @@ def sort_clusters(
     Reads
     -----
     adata.layers[layer_name] : copy number matrix
-    adata.obs[cluster_col] : cluster assignment per cell
+    adata.obs[cluster_field] : cluster assignment per cell
 
     Modifies
     --------
@@ -263,17 +267,17 @@ def sort_clusters(
         that ordering
     """
 
-    if cell_ids is None:
-        cell_ids = adata.obs.index
+    if obs_ids is None:
+        obs_ids = adata.obs.index
 
-    if bin_ids is None:
-        bin_ids = adata.var.index
+    if var_ids is None:
+        var_ids = adata.var.index
 
     agg_X, agg_layers = _resolve_cluster_aggregation(
         adata, layer_name, agg_X, agg_layers)
 
     adata_clusters = scgenome.tools.cluster.aggregate_clusters(
-        adata[cell_ids, bin_ids], cluster_col=cluster_col, agg_X=agg_X, agg_layers=agg_layers)
+        adata[obs_ids, var_ids], cluster_field=cluster_field, agg_X=agg_X, agg_layers=agg_layers)
 
     adata_clusters = sort_cells(
         adata_clusters,
@@ -282,10 +286,10 @@ def sort_clusters(
 
     # aggregate_clusters indexes clusters by str(cluster id), so the lookup
     # back has to stringify too or a non string cluster column misses entirely
-    cluster_keys = adata.obs.loc[cell_ids, cluster_col].astype(str)
+    cluster_keys = adata.obs.loc[obs_ids, cluster_field].astype(str)
 
     adata.obs['cluster_order'] = np.nan
-    adata.obs.loc[cell_ids, 'cluster_order'] = pd.Series(
+    adata.obs.loc[obs_ids, 'cluster_order'] = pd.Series(
         adata_clusters.obs.loc[cluster_keys.values, 'cell_order'].values,
         index=cluster_keys.index)
 
@@ -294,7 +298,9 @@ def sort_clusters(
     clustering = adata_clusters.uns.get('cell_order', {}).get('cell_order')
     if clustering is not None:
         adata.uns.setdefault('cell_order', {})['cluster_order'] = dict(
-            clustering, level='cluster', cluster_col=cluster_col)
+            # 'cluster_col' is persisted in the .h5ad, so the key keeps its
+            # name even though the argument is now cluster_field
+            clustering, level='cluster', cluster_col=cluster_field)
 
     return adata
 

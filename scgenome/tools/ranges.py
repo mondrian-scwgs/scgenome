@@ -8,6 +8,7 @@ from anndata import AnnData
 from numpy import ndarray
 
 import scgenome.refgenome
+from scgenome._deprecate import renamed_arguments
 
 
 
@@ -56,12 +57,12 @@ def pyranges_to_dataframe(data: PyRanges) -> DataFrame:
     return data
 
 
-def create_bins_pr(binsize: int, genome=None) -> PyRanges:
+def create_bins_pr(bin_size: int, genome=None) -> PyRanges:
     """ Create a regular binning of the genome
 
     Parameters
     ----------
-    binsize : int
+    bin_size : int
         size of bins
     genome : str or RefGenomeInfo, optional
         genome version, by default uses global setting
@@ -77,17 +78,18 @@ def create_bins_pr(binsize: int, genome=None) -> PyRanges:
 
     chromsizes = pr.PyRanges(chromsizes)
 
-    bins = pr.gf.tile_genome(chromsizes, binsize)
+    bins = pr.gf.tile_genome(chromsizes, bin_size)
 
     return bins
 
 
-def create_bins(binsize: int, genome=None) -> DataFrame:
+@renamed_arguments(binsize='bin_size')
+def create_bins(bin_size: int, genome=None) -> DataFrame:
     """ Create a regular binning of the genome
 
     Parameters
     ----------
-    binsize : int
+    bin_size : int
         size of bins
     genome : str or RefGenomeInfo, optional
         genome version, by default uses global setting
@@ -97,7 +99,7 @@ def create_bins(binsize: int, genome=None) -> DataFrame:
     DataFrame
         regular bins tiled across the genome
     """
-    return pyranges_to_dataframe(create_bins_pr(binsize=binsize, genome=genome))
+    return pyranges_to_dataframe(create_bins_pr(bin_size=bin_size, genome=genome))
 
 
 def rebin_agg_df(data: DataFrame, intersect: DataFrame, agg_f: dict) -> DataFrame:

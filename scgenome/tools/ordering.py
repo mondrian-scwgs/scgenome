@@ -659,9 +659,9 @@ def resolve_cell_order(adata, fields=None):
 
         order = scgenome.tl.resolve_cell_order(adata, fields=['cluster_id', 'cell_order'])
         scgenome.pl.plot_heatmap(adata, layer_name='state', ax=axes[0],
-                                 palette='cn', cell_order=order)
+                                 palette='cn', obs_order=order)
         scgenome.pl.plot_heatmap(adata, layer_name='copy', ax=axes[1],
-                                 cell_order=order)
+                                 obs_order=order)
 
     """
     validate_adata(adata, caller='resolve_cell_order')
