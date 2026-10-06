@@ -9,7 +9,7 @@ from .results import LegendSpec, PanelResult, draw_legend
 from .heatmap import (
     plot_heatmap, plot_tcn_heatmap, plot_ascn_heatmap,
     plot_obs_annotation, plot_var_annotation,
-    plot_cell_matrix, plot_cell_cn_matrix)
+    plot_cell_cn_matrix)
 from .phylo import plot_tree, plot_dendrogram
 from .grid import CellGrid, GridResult
 from .presets import (

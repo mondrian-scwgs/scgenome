@@ -127,8 +127,8 @@ def test_cmap_and_palette_are_mutually_exclusive(allele_adata):
     plt.close('all')
 
 
-def test_plot_cell_matrix_defaults_to_continuous(allele_adata):
-    """ The generic matrix makes no assumption about what the values mean
+def test_plot_heatmap_defaults_to_continuous(allele_adata):
+    """ The generic heatmap makes no assumption about what the values mean
     """
     g = scgenome.pl.plot_heatmap(allele_adata, layer_name='A')
 

@@ -368,47 +368,6 @@ def plot_var_annotation(adata, field, ax=None, var_order=None, cmap=None,
     return _annotation(values, ax, field, horizontal=True, cmap=cmap, style=style)
 
 
-@renamed_arguments(cell_order='obs_order', cell_order_fields='obs_order_fields',
-                   bin_order='var_order', show_cell_ids='show_obs_ids')
-def plot_cell_matrix(
-        adata: AnnData,
-        layer_name=None,
-        obs_order_fields=(),
-        obs_order=None,
-        ax=None,
-        vmin=None,
-        vmax=None,
-        cmap=None,
-        palette=None,
-        show_obs_ids=False,
-        style='black',
-        rasterized=False):
-    """ Plot a matrix of per cell values across the genome
-
-    .. deprecated::
-        Renamed to `scgenome.pl.plot_heatmap`, since the rows are not always
-        cells and the plot is a heatmap either way. The result still supports
-        `result['ax']` as well as `result.ax`.
-    """
-    warnings.warn(
-        'plot_cell_matrix is deprecated, use plot_heatmap',
-        DeprecationWarning, stacklevel=2)
-
-    return plot_heatmap(
-        adata,
-        layer_name=layer_name,
-        ax=ax,
-        obs_order=obs_order,
-        obs_order_fields=obs_order_fields,
-        palette=palette,
-        cmap=cmap,
-        vmin=vmin,
-        vmax=vmax,
-        show_obs_ids=show_obs_ids,
-        style=style,
-        rasterized=rasterized)
-
-
 def map_catagorigal_colors(values, cmap=None):
     """ Map categorical values to colors
 

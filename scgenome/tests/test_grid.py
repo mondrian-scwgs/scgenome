@@ -384,22 +384,6 @@ def test_plot_tree_cn_is_deprecated_but_works(adata, tree):
     plt.close('all')
 
 
-def test_plot_cell_matrix_is_deprecated_and_equivalent(adata):
-    """ The rename must not change what is drawn """
-    with pytest.warns(DeprecationWarning, match='plot_heatmap'):
-        old = scgenome.pl.plot_cell_matrix(
-            adata, layer_name='state', palette='cn',
-            obs_order_fields=['cell_order'], ax=plt.subplots()[1])
-
-    new = scgenome.pl.plot_heatmap(
-        adata, layer_name='state', palette='cn',
-        obs_order_fields=['cell_order'], ax=plt.subplots()[1])
-
-    np.testing.assert_array_equal(
-        np.asarray(old.im.get_array()), np.asarray(new.im.get_array()))
-    plt.close('all')
-
-
 def test_result_supports_mapping_access(adata):
     """ Stands in for the dict these functions used to return """
     result = scgenome.pl.plot_heatmap(

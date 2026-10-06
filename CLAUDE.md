@@ -88,8 +88,8 @@ it matches by equality and renders almost everything white;
 These are named for the values they draw rather than for what the rows are,
 because the rows of an AnnData are not always cells.
 
-`pl.plot_cell_cn_matrix`/`_fig`, `pl.plot_cell_matrix` and the `raw=` argument
-are deprecated aliases kept for compatibility; use the table above instead.
+`pl.plot_cell_cn_matrix`/`_fig` and the `raw=` argument are deprecated aliases
+kept for compatibility; use the table above instead.
 
 ## Drawing primitives
 
@@ -238,11 +238,25 @@ where the matching argument was renamed. `tests/test_renames.py` guards this.
 
 Renaming something that has callers is additive and has no removal date: use
 `renamed_arguments` for an argument or a thin warning wrapper for a function,
-and pin the old defaults in the wrapper if they differed. A name that shipped
-too recently to have callers is renamed in place instead, with no alias — an
-alias nobody will use is just a second name to maintain. `test_renames.py`
-asserts both halves: that the surviving aliases still work, and that the
-never-adopted names are gone.
+and pin the old defaults in the wrapper if they differed.
+
+A name with no realistic callers is renamed in place instead, with no alias —
+an alias nobody will use is just a second name to maintain. Decide which case
+you are in from release history rather than by feel, since a name can look old
+in the source and still be days old to anyone installing the package:
+
+```sh
+git log --all --reverse --format='%h %ad %s' --date=short \
+    -S'def the_name\(' --pickaxe-regex -- '*.py'    # when it was written
+git for-each-ref --sort=creatordate --format='%(refname:short)' refs/tags
+git show <tag>:path/to/file.py | grep 'def the_name('   # when it first shipped
+```
+
+The heatmap and profile names renamed here were all written on 2026-09-25 and
+first released in v0.0.23, so they went in place. `plot_cn_profile` and
+`plot_cell_cn_matrix`/`_fig` date to 2022 and keep their aliases.
+`test_renames.py` asserts both halves: the surviving aliases still work, and
+the never-adopted names are gone.
 
 ## Function Conventions
 

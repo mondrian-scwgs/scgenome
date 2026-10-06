@@ -58,22 +58,25 @@ def test_new_plotting_name_is_exported(name):
 
 
 @pytest.mark.parametrize('name', [
-    'plot_cn_profile', 'plot_cell_matrix',
+    'plot_cn_profile',
     'plot_cell_cn_matrix', 'plot_cell_cn_matrix_fig',
 ])
 def test_old_plotting_name_is_still_exported(name):
-    """ No removal date: the aliases that predate this pass stay reachable. """
+    """ No removal date: these date to 2022 and have had years of releases to
+    acquire callers, so they stay reachable. """
     assert callable(getattr(scgenome.pl, name))
 
 
 @pytest.mark.parametrize('name', [
     'plot_cell_tcn', 'plot_cell_ascn',
     'plot_cell_tcn_matrix', 'plot_cell_ascn_matrix',
-    'plot_cell_matrix_fig', 'plot_cell_tcn_matrix_fig', 'plot_cell_ascn_matrix_fig',
+    'plot_cell_matrix', 'plot_cell_matrix_fig',
+    'plot_cell_tcn_matrix_fig', 'plot_cell_ascn_matrix_fig',
 ])
 def test_never_adopted_name_is_gone(name):
-    """ These shipped too recently to have callers, so they were renamed in
-    place rather than aliased. """
+    """ All of these were introduced on 2026-09-25 and first released in
+    v0.0.23, so they had no realistic callers and were renamed in place rather
+    than aliased. The names that survive above date to 2022. """
     assert not hasattr(scgenome.pl, name)
 
 
