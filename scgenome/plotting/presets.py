@@ -18,7 +18,7 @@ import Bio.Phylo
 from scgenome.tools.ordering import (
     align_tree_to_order, resolve_cell_order, tree_leaf_order)
 from .cn_colors import map_categorical_colors
-from scgenome._deprecate import renamed_arguments, warn_renamed
+from scgenome._deprecate import renamed_arguments
 from .grid import CellGrid
 from .heatmap import (
     _deprecated_cn_matrix_args, _warn_if_not_integer, _with_allele_state_layer)
@@ -107,7 +107,7 @@ def plot_heatmap_fig(
         import scgenome
         adata = scgenome.datasets.OV2295_HMMCopy_reduced()
 
-        g = scgenome.pl.plot_cell_matrix_fig(
+        g = scgenome.pl.plot_heatmap_fig(
             adata,
             layer_name='copy', vmin=0, vmax=4,
             obs_order_fields=['cell_order'],
@@ -214,7 +214,7 @@ def plot_tcn_heatmap_fig(adata: AnnData, layer_name='state', **kwargs):
     layer_name : str, optional
         layer with copy number states to plot, None for X, by default 'state'
     **kwargs : dict
-        additional arguments passed to `plot_cell_matrix_fig`
+        additional arguments passed to `plot_heatmap_fig`
 
     Returns
     -------
@@ -257,7 +257,7 @@ def plot_ascn_heatmap_fig(adata: AnnData, **kwargs):
     adata : AnnData
         copy number data with layers['A'] and layers['B']
     **kwargs : dict
-        additional arguments passed to `plot_cell_matrix_fig`
+        additional arguments passed to `plot_heatmap_fig`
 
     Returns
     -------
@@ -427,33 +427,3 @@ def plot_tree_cn(
     plt.subplots_adjust(left=0.065, right=0.97, top=0.96, bottom=0.065, wspace=0.01)
 
     return fig
-
-
-def plot_cell_matrix_fig(adata: AnnData, **kwargs):
-    """ Plot a cell by bin matrix with annotations and a legend
-
-    .. deprecated::
-        Use `plot_heatmap_fig`.
-    """
-    warn_renamed('plot_cell_matrix_fig', 'plot_heatmap_fig', stacklevel=2)
-    return plot_heatmap_fig(adata, **kwargs)
-
-
-def plot_cell_tcn_matrix_fig(adata: AnnData, layer_name='state', **kwargs):
-    """ Plot a total copy number matrix with annotations and a legend
-
-    .. deprecated::
-        Use `plot_tcn_heatmap_fig`.
-    """
-    warn_renamed('plot_cell_tcn_matrix_fig', 'plot_tcn_heatmap_fig', stacklevel=2)
-    return plot_tcn_heatmap_fig(adata, layer_name=layer_name, **kwargs)
-
-
-def plot_cell_ascn_matrix_fig(adata: AnnData, **kwargs):
-    """ Plot an allele specific copy number matrix with annotations and a legend
-
-    .. deprecated::
-        Use `plot_ascn_heatmap_fig`.
-    """
-    warn_renamed('plot_cell_ascn_matrix_fig', 'plot_ascn_heatmap_fig', stacklevel=2)
-    return plot_ascn_heatmap_fig(adata, **kwargs)

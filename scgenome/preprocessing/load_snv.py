@@ -4,10 +4,7 @@ from scipy.sparse import csr_matrix
 
 from anndata import AnnData
 
-from scgenome._deprecate import renamed_arguments
 
-
-@renamed_arguments(filename='genotyping_filename')
 def read_snv_genotyping(genotyping_filename: str) -> AnnData:
     """ Read SNV genotyping into an AnnData
 

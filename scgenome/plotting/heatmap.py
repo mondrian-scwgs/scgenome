@@ -22,7 +22,7 @@ import pandas as pd
 from anndata import AnnData
 
 import scgenome.refgenome
-from scgenome._deprecate import renamed_arguments, warn_renamed
+from scgenome._deprecate import renamed_arguments
 from scgenome.tools.ordering import resolve_bin_order, resolve_cell_order
 from . import cn_colors
 from .cn_colors import map_categorical_colors
@@ -580,27 +580,6 @@ def plot_cell_cn_matrix(adata: AnnData, layer_name='state', cmap=None, palette=N
 
     return plot_heatmap(
         adata, **_deprecated_cn_matrix_args(layer_name, cmap, palette, raw), **kwargs)
-
-
-def plot_cell_tcn_matrix(adata: AnnData, layer_name='state', **kwargs):
-    """ Plot a total copy number matrix
-
-    .. deprecated::
-        Use `plot_tcn_heatmap`. The rows of an AnnData are not always cells,
-        and the heatmap functions now share one noun with `plot_heatmap`.
-    """
-    warn_renamed('plot_cell_tcn_matrix', 'plot_tcn_heatmap', stacklevel=2)
-    return plot_tcn_heatmap(adata, layer_name=layer_name, **kwargs)
-
-
-def plot_cell_ascn_matrix(adata: AnnData, **kwargs):
-    """ Plot an allele specific copy number matrix
-
-    .. deprecated::
-        Use `plot_ascn_heatmap`.
-    """
-    warn_renamed('plot_cell_ascn_matrix', 'plot_ascn_heatmap', stacklevel=2)
-    return plot_ascn_heatmap(adata, **kwargs)
 
 
 # Adapted from: https://github.com/bernatgel/karyoploteR/blob/master/R/color.R

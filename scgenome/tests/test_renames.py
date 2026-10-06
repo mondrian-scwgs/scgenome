@@ -58,13 +58,23 @@ def test_new_plotting_name_is_exported(name):
 
 
 @pytest.mark.parametrize('name', [
-    'plot_cn_profile', 'plot_cell_tcn', 'plot_cell_ascn',
-    'plot_cell_tcn_matrix', 'plot_cell_ascn_matrix', 'plot_cell_cn_matrix',
-    'plot_cell_matrix_fig', 'plot_cell_tcn_matrix_fig', 'plot_cell_ascn_matrix_fig',
+    'plot_cn_profile', 'plot_cell_matrix',
+    'plot_cell_cn_matrix', 'plot_cell_cn_matrix_fig',
 ])
 def test_old_plotting_name_is_still_exported(name):
-    """ No removal date: the aliases stay reachable. """
+    """ No removal date: the aliases that predate this pass stay reachable. """
     assert callable(getattr(scgenome.pl, name))
+
+
+@pytest.mark.parametrize('name', [
+    'plot_cell_tcn', 'plot_cell_ascn',
+    'plot_cell_tcn_matrix', 'plot_cell_ascn_matrix',
+    'plot_cell_matrix_fig', 'plot_cell_tcn_matrix_fig', 'plot_cell_ascn_matrix_fig',
+])
+def test_never_adopted_name_is_gone(name):
+    """ These shipped too recently to have callers, so they were renamed in
+    place rather than aliased. """
+    assert not hasattr(scgenome.pl, name)
 
 
 # --------------------------------------------------------------------------
@@ -187,24 +197,16 @@ def _ylim(fn):
     return tuple(np.round(axes.get_ylim(), 6))
 
 
-def test_plot_cell_tcn_alias_keeps_its_squashy_default(adata):
-    """ plot_cell_tcn defaulted squashy=True; plot_tcn_profile defaults False.
-
-    The alias must pin its own default, or existing calls silently change what
-    they draw.
-    """
+def test_squashy_is_opt_in_on_plot_tcn_profile(adata):
+    """ squashy compresses the y axis, so it is the surprising behaviour and
+    defaults to False. """
     cell = str(adata.obs.index[0])
 
-    with pytest.warns(DeprecationWarning, match='plot_cell_tcn is deprecated'):
-        legacy = _ylim(lambda a: scgenome.pl.plot_cell_tcn(adata, cell, ax=a))
-
+    unsquashed = _ylim(lambda a: scgenome.pl.plot_tcn_profile(adata, cell, ax=a))
     squashed = _ylim(
         lambda a: scgenome.pl.plot_tcn_profile(adata, cell, ax=a, squashy=True))
-    unsquashed = _ylim(
-        lambda a: scgenome.pl.plot_tcn_profile(adata, cell, ax=a))
 
-    assert legacy == squashed
-    assert legacy != unsquashed
+    assert unsquashed != squashed
 
 
 def test_plot_cn_profile_alias_keeps_its_own_layer_defaults(adata):
@@ -220,55 +222,46 @@ def test_plot_cn_profile_alias_keeps_its_own_layer_defaults(adata):
     assert legacy == explicit
 
 
-def test_plot_ascn_profile_matches_its_alias(allele_adata):
+def test_plot_ascn_profile_draws_baf(allele_adata):
     cell = str(allele_adata.obs.index[0])
 
-    new = _ylim(lambda a: scgenome.pl.plot_ascn_profile(allele_adata, cell, ax=a))
-
-    with pytest.warns(DeprecationWarning, match='plot_cell_ascn is deprecated'):
-        old = _ylim(lambda a: scgenome.pl.plot_cell_ascn(allele_adata, cell, ax=a))
-
-    assert new == old
+    assert _ylim(
+        lambda a: scgenome.pl.plot_ascn_profile(allele_adata, cell, ax=a)) == (-0.05, 1.05)
 
 
 # --------------------------------------------------------------------------
 # the heatmap family
 # --------------------------------------------------------------------------
 
-def test_tcn_heatmap_matches_its_alias(adata):
+def test_tcn_heatmap_uses_the_cn_palette(adata):
+    """ plot_cell_cn_matrix predates this pass and still aliases, so it is the
+    one remaining check that the renamed heatmap draws what it always did. """
     expected = scgenome.pl.plot_tcn_heatmap(adata, ax=plt.subplots()[1])
 
-    with pytest.warns(DeprecationWarning, match='plot_cell_tcn_matrix is deprecated'):
-        legacy = scgenome.pl.plot_cell_tcn_matrix(adata, ax=plt.subplots()[1])
+    with pytest.warns(DeprecationWarning, match='plot_cell_cn_matrix is deprecated'):
+        legacy = scgenome.pl.plot_cell_cn_matrix(adata, ax=plt.subplots()[1])
 
     np.testing.assert_array_equal(
         legacy['im'].get_array(), expected['im'].get_array())
 
 
-def test_ascn_heatmap_matches_its_alias(allele_adata):
-    expected = scgenome.pl.plot_ascn_heatmap(allele_adata, ax=plt.subplots()[1])
+def test_ascn_heatmap_draws_every_bin(allele_adata):
+    result = scgenome.pl.plot_ascn_heatmap(allele_adata, ax=plt.subplots()[1])
 
-    with pytest.warns(DeprecationWarning, match='plot_cell_ascn_matrix is deprecated'):
-        legacy = scgenome.pl.plot_cell_ascn_matrix(allele_adata, ax=plt.subplots()[1])
-
-    np.testing.assert_array_equal(
-        legacy['im'].get_array(), expected['im'].get_array())
+    assert result['im'].get_array().shape[1] == allele_adata.shape[1]
 
 
-@pytest.mark.parametrize('old_name,new_name', [
-    ('plot_cell_matrix_fig', 'plot_heatmap_fig'),
-    ('plot_cell_tcn_matrix_fig', 'plot_tcn_heatmap_fig'),
+@pytest.mark.parametrize('name', [
+    'plot_heatmap_fig', 'plot_tcn_heatmap_fig',
 ])
-def test_fig_preset_aliases_warn(adata, old_name, new_name):
-    getattr(scgenome.pl, new_name)(adata)
-    plt.close('all')
+def test_fig_presets_build_a_figure(adata, name):
+    result = getattr(scgenome.pl, name)(adata)
 
-    with pytest.warns(DeprecationWarning, match=f'{old_name} is deprecated'):
-        getattr(scgenome.pl, old_name)(adata)
+    assert result['grid'] is not None
 
 
 # --------------------------------------------------------------------------
-# plot_rearrangement_arcs took ax first, unlike everything else
+# plot_rearrangement_arcs now leads with breakpoints, like every other plot
 # --------------------------------------------------------------------------
 
 @pytest.fixture
@@ -285,30 +278,27 @@ def _arc_artists(fn):
     return len(axes.lines) + len(axes.patches)
 
 
-def test_arcs_new_argument_order(breakpoints):
+def test_arcs_take_breakpoints_first(breakpoints):
     assert _arc_artists(lambda a: scgenome.pl.plot_rearrangement_arcs(
         breakpoints, chromosome='1', ax=a)) > 0
 
 
-@pytest.mark.parametrize('call', [
-    'two_positional', 'three_positional', 'mixed',
-])
-def test_arcs_legacy_ax_first_order_still_works(breakpoints, call):
-    """ Every legacy positional form must bind to the same arguments. """
-    expected = _arc_artists(lambda a: scgenome.pl.plot_rearrangement_arcs(
-        breakpoints, chromosome='1', ax=a))
+def test_arcs_default_to_the_current_axes(breakpoints):
+    fig, axes = plt.subplots()
+    axes.set_xlim(0, 250e6)
+    axes.set_ylim(0, 8)
+    plt.sca(axes)
 
-    calls = {
-        'two_positional': lambda a: scgenome.pl.plot_rearrangement_arcs(
-            a, breakpoints, '1'),
-        'three_positional': lambda a: scgenome.pl.plot_rearrangement_arcs(
-            a, breakpoints, '1', None),
-        'mixed': lambda a: scgenome.pl.plot_rearrangement_arcs(
-            a, breakpoints, chromosome='1'),
-    }
+    scgenome.pl.plot_rearrangement_arcs(breakpoints, chromosome='1')
 
-    with pytest.warns(DeprecationWarning, match='passing ax first'):
-        assert _arc_artists(calls[call]) == expected
+    assert len(axes.lines) + len(axes.patches) > 0
+
+
+def test_arcs_no_longer_accept_ax_first(breakpoints):
+    """ The old ax-first order was never adopted, so it is simply gone. """
+    fig, axes = plt.subplots()
+    with pytest.raises(Exception):
+        scgenome.pl.plot_rearrangement_arcs(axes, breakpoints, '1')
 
 
 # --------------------------------------------------------------------------

@@ -85,11 +85,11 @@ values happen to be present. Never use the CN palette on a continuous layer —
 it matches by equality and renders almost everything white;
 `plot_tcn_heatmap` warns if you try.
 
-`pl.plot_cell_tcn_matrix`/`_fig`, `pl.plot_cell_ascn_matrix`/`_fig`,
-`pl.plot_cell_cn_matrix`/`_fig`, `pl.plot_cell_matrix`/`_fig` and the `raw=`
-argument are deprecated aliases kept for compatibility; use the table above
-instead. The rows of an AnnData are not always cells, so these are named for
-the values they draw rather than for what the rows are.
+These are named for the values they draw rather than for what the rows are,
+because the rows of an AnnData are not always cells.
+
+`pl.plot_cell_cn_matrix`/`_fig`, `pl.plot_cell_matrix` and the `raw=` argument
+are deprecated aliases kept for compatibility; use the table above instead.
 
 ## Drawing primitives
 
@@ -236,9 +236,13 @@ in an AnnData do not change at all, because they are written into every saved
 `uns['cell_order']['cluster_order']['cluster_col']` all keep their names even
 where the matching argument was renamed. `tests/test_renames.py` guards this.
 
-Renames are additive and have no removal date. To rename something, use
+Renaming something that has callers is additive and has no removal date: use
 `renamed_arguments` for an argument or a thin warning wrapper for a function,
-and pin the old defaults in the wrapper if they differed.
+and pin the old defaults in the wrapper if they differed. A name that shipped
+too recently to have callers is renamed in place instead, with no alias — an
+alias nobody will use is just a second name to maintain. `test_renames.py`
+asserts both halves: that the surviving aliases still work, and that the
+never-adopted names are gone.
 
 ## Function Conventions
 
