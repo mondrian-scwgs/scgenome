@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import collections
+import scipy.sparse
 
 from . import refgenome
 
@@ -79,3 +80,45 @@ def concat_with_categories(dfs, **kwargs):
     return pd.concat(dfs, **kwargs)
 
 
+
+
+def create_sparse_matrices(data, row, col, values):
+    """ Create sparse matrices from a long form dataframe
+
+    Rows and columns are ordered by the sorted unique values of the `row` and
+    `col` columns. Explicit zero entries are removed from each matrix.
+
+    Parameters
+    ----------
+    data : pandas.DataFrame
+        long form data, one row per entry
+    row : str
+        column giving the row of each entry
+    col : str
+        column giving the column of each entry
+    values : list of str
+        columns giving the values, one matrix each
+
+    Returns
+    -------
+    matrices : dict of scipy.sparse.csr_matrix
+        matrix for each column in `values`
+    index : pandas.Index
+        row labels, named `row`
+    columns : pandas.Index
+        column labels, named `col`
+    """
+    row_values = pd.Categorical(data[row])
+    col_values = pd.Categorical(data[col])
+
+    index = row_values.categories.rename(row)
+    columns = col_values.categories.rename(col)
+
+    matrices = {}
+    for value in values:
+        matrices[value] = scipy.sparse.csr_matrix(
+            (data[value], (row_values.codes, col_values.codes)),
+            shape=(index.size, columns.size))
+        matrices[value].eliminate_zeros()
+
+    return matrices, index, columns

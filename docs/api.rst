@@ -40,6 +40,14 @@ Filtering
    pp.calculate_filter_metrics
    pp.filter_cells
 
+Quality metrics
+~~~~~~~~~~~~~~~
+
+.. autosummary::
+   :toctree: generated/
+
+   pp.calculate_local_baf_variance
+
 
 Tools: `tl`
 -----------
@@ -61,6 +69,7 @@ Clustering and ordering
    tl.sort_clusters
    tl.aggregate_clusters
    tl.aggregate_clusters_hmmcopy
+   tl.aggregate_pseudobulk
 
 Ordering
 ~~~~~~~~
@@ -101,6 +110,23 @@ Generating and transforming binned data
    tl.count_gc
    tl.mean_from_bigwig
    tl.add_cyto_giemsa_stain
+
+Copy number changes
+~~~~~~~~~~~~~~~~~~~
+
+.. autosummary::
+   :toctree: generated/
+
+   tl.compute_cn_changepoint_matrix
+
+SNVs
+~~~~
+
+.. autosummary::
+   :toctree: generated/
+
+   tl.add_cn_bin
+   tl.is_apobec_snv
 
 Gene regions
 ~~~~~~~~~~~~
