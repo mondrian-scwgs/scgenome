@@ -103,6 +103,7 @@ Generating and transforming binned data
    :toctree: generated/
 
    tl.create_bins
+   tl.assign_bins
    tl.rebin
    tl.rebin_regular
    tl.weighted_mean
@@ -118,14 +119,6 @@ Copy number changes
    :toctree: generated/
 
    tl.compute_cn_changepoint_matrix
-
-SNVs
-~~~~
-
-.. autosummary::
-   :toctree: generated/
-
-   tl.add_cn_bin
 
 Gene regions
 ~~~~~~~~~~~~

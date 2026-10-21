@@ -291,7 +291,7 @@ the never-adopted names are gone.
 | `tl.aggregate_clusters` | obs[cluster_field], layers | returns new cluster-level AnnData |
 | `tl.aggregate_pseudobulk` | layers, var | nothing, returns a per-bin DataFrame |
 | `tl.compute_cn_changepoint_matrix` | layers['state','copy'], var['chr','start','gc'] | nothing, returns a bin by cell DataFrame |
-| `tl.add_cn_bin` | var['chromosome','position'] of an SNV adata | var['cn_bin'] |
+| `tl.assign_bins` | positions DataFrame (chromosome, position), bins DataFrame (chr, start, end) | nothing, returns a Series of bin IDs |
 | `pp.calculate_local_baf_variance` | layers['alleleB','totalcounts'], var['chr','start'] | var['local_baf_variance'] |
 
 ## Available Datasets

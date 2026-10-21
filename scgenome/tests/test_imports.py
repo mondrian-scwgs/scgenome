@@ -37,7 +37,7 @@ def test_imports():
     print(scgenome.pp.calculate_local_baf_variance)
     print(scgenome.tl.aggregate_pseudobulk)
     print(scgenome.tl.compute_cn_changepoint_matrix)
-    print(scgenome.tl.add_cn_bin)
+    print(scgenome.tl.assign_bins)
     print(scgenome.pp.calculate_filter_metrics)
     print(scgenome.pp.create_cn_anndata)
     print(scgenome.pp.read_dlp_hmmcopy)

@@ -1,4 +1,5 @@
 import pyranges as pr
+import numpy as np
 import pandas as pd
 import anndata as ad
 
@@ -217,6 +218,69 @@ def intersect_positions(a: DataFrame, b: DataFrame):
 
     return intersect
 
+
+def assign_bins(
+        positions: DataFrame,
+        bins: DataFrame,
+        chr_col: str = 'chromosome',
+        position_col: str = 'position') -> pd.Series:
+    """ Find the bin containing each of a set of genomic positions
+
+    Bins and positions are both 1-based, and a bin contains positions `start`
+    to `end` inclusive, as in DLP HMMCopy bins.
+
+    Parameters
+    ----------
+    positions : DataFrame
+        genomic positions, with chromosome and position columns named by
+        `chr_col` and `position_col`, for instance the `var` of an SNV AnnData
+        from `scgenome.pp.read_snv_genotyping`
+    bins : DataFrame
+        bins with columns 'chr', 'start', 'end', indexed by bin ID, for
+        instance the `var` of a copy number AnnData
+    chr_col : str, optional
+        chromosome column of `positions`, by default 'chromosome'
+    position_col : str, optional
+        position column of `positions`, by default 'position'
+
+    Returns
+    -------
+    pandas.Series
+        ID of the bin containing each position, indexed like `positions`,
+        missing for positions outside every bin
+
+    Examples
+    --------
+    Assign SNVs to the copy number bins of the same cells:
+
+    >>> snv_adata.var['cn_bin'] = scgenome.tl.assign_bins(snv_adata.var, cn_adata.var)
+    """
+    for name, data, columns in [
+            ('positions', positions, [chr_col, position_col]),
+            ('bins', bins, ['chr', 'start', 'end'])]:
+        missing = [c for c in columns if c not in data.columns]
+        if missing:
+            raise ValueError(f"assign_bins: {name} missing columns {missing}, has {list(data.columns)}")
+
+    chromosomes = positions[chr_col].astype(str).values
+    coords = positions[position_col].values
+    bin_chromosomes = bins['chr'].astype(str).values
+    assigned = np.full(len(positions), None, dtype=object)
+
+    for chromosome in np.unique(chromosomes):
+        idx = np.flatnonzero(chromosomes == chromosome)
+        chr_bins = bins[bin_chromosomes == chromosome].sort_values('start')
+        if len(chr_bins) == 0:
+            continue
+
+        # Last bin starting at or before each position, then check it reaches the position
+        bin_idx = np.searchsorted(chr_bins['start'].values, coords[idx], side='right') - 1
+        in_bin = (bin_idx >= 0)
+        in_bin[in_bin] = coords[idx[in_bin]] <= chr_bins['end'].values[bin_idx[in_bin]]
+
+        assigned[idx[in_bin]] = chr_bins.index.values[bin_idx[in_bin]]
+
+    return pd.Series(assigned, index=positions.index, name=bins.index.name)
 
 def rebin(adata: AnnData, target_bins: DataFrame, outer_join: bool=False, agg_X=None, agg_var=None, agg_layers=()) -> AnnData:
     """ Rebin an AnnData and aggregate across multiple intersecting regions
