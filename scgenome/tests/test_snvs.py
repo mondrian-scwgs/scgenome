@@ -1,4 +1,4 @@
-"""Tests for SNV annotation and long form to sparse matrix conversion."""
+"""Tests for assigning SNVs to bins and long form to sparse matrix conversion."""
 
 import anndata as ad
 import numpy as np
@@ -47,20 +47,6 @@ def test_add_cn_bin_raises_outside_bins(bins, chromosome, position):
 
     with pytest.raises(ValueError, match='1 SNVs are not in any bin'):
         scgenome.tl.add_cn_bin(adata, bins)
-
-
-@pytest.mark.parametrize('ref,alt,trinuc,expected', [
-    ('C', 'T', 'TCA', True),   # SBS2
-    ('C', 'G', 'TCT', True),   # SBS13
-    ('G', 'A', 'TGA', True),   # SBS2, reverse complement of TCA
-    ('G', 'C', 'AGA', True),   # SBS13, reverse complement of TCT
-    ('C', 'A', 'TCA', False),  # wrong substitution
-    ('C', 'T', 'ACA', False),  # not preceded by T
-    ('C', 'T', 'TCG', False),  # not followed by W
-    ('T', 'C', 'TTA', False),
-])
-def test_is_apobec_snv(ref, alt, trinuc, expected):
-    assert scgenome.tl.is_apobec_snv(ref, alt, trinuc) is expected
 
 
 def test_create_sparse_matrices():

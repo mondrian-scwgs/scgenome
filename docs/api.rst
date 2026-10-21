@@ -126,7 +126,6 @@ SNVs
    :toctree: generated/
 
    tl.add_cn_bin
-   tl.is_apobec_snv
 
 Gene regions
 ~~~~~~~~~~~~
