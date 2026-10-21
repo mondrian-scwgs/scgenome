@@ -103,7 +103,7 @@ Generating and transforming binned data
    :toctree: generated/
 
    tl.create_bins
-   tl.assign_bins
+   tl.assign_position_bins
    tl.rebin
    tl.rebin_regular
    tl.weighted_mean

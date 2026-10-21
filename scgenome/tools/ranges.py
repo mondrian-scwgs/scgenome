@@ -219,7 +219,7 @@ def intersect_positions(a: DataFrame, b: DataFrame):
     return intersect
 
 
-def assign_bins(
+def assign_position_bins(
         positions: DataFrame,
         bins: DataFrame,
         chr_col: str = 'chromosome',
@@ -253,14 +253,14 @@ def assign_bins(
     --------
     Assign SNVs to the copy number bins of the same cells:
 
-    >>> snv_adata.var['cn_bin'] = scgenome.tl.assign_bins(snv_adata.var, cn_adata.var)
+    >>> snv_adata.var['cn_bin'] = scgenome.tl.assign_position_bins(snv_adata.var, cn_adata.var)
     """
     for name, data, columns in [
             ('positions', positions, [chr_col, position_col]),
             ('bins', bins, ['chr', 'start', 'end'])]:
         missing = [c for c in columns if c not in data.columns]
         if missing:
-            raise ValueError(f"assign_bins: {name} missing columns {missing}, has {list(data.columns)}")
+            raise ValueError(f"assign_position_bins: {name} missing columns {missing}, has {list(data.columns)}")
 
     chromosomes = positions[chr_col].astype(str).values
     coords = positions[position_col].values

@@ -2,7 +2,7 @@ import unittest
 import numpy as np
 import pandas as pd
 import pytest
-from scgenome.tools.ranges import intersect_regions, intersect_positions, assign_bins, NoIntersectionError
+from scgenome.tools.ranges import intersect_regions, intersect_positions, assign_position_bins, NoIntersectionError
 
 
 class TestRanges(unittest.TestCase):
@@ -134,40 +134,40 @@ def positions(chromosomes, coords, **columns):
                         index=[f'snv{i}' for i in range(len(coords))])
 
 
-def test_assign_bins_includes_both_bin_ends(bins):
+def test_assign_position_bins_includes_both_bin_ends(bins):
     snvs = positions(['1', '1', '1', '1', '2'], [1, 100, 101, 300, 50])
 
-    assigned = assign_bins(snvs, bins)
+    assigned = assign_position_bins(snvs, bins)
 
     assert list(assigned) == ['1:1-100', '1:1-100', '1:101-200', '1:201-300', '2:1-100']
     assert assigned.index.equals(snvs.index)
     assert assigned.name == 'bin'
 
 
-def test_assign_bins_ignores_bin_order_and_categoricals(bins):
+def test_assign_position_bins_ignores_bin_order_and_categoricals(bins):
     shuffled = bins.iloc[::-1].assign(chr=lambda df: pd.Categorical(df['chr']))
 
-    assigned = assign_bins(positions(pd.Categorical(['2', '1']), [10, 150]), shuffled)
+    assigned = assign_position_bins(positions(pd.Categorical(['2', '1']), [10, 150]), shuffled)
 
     assert list(assigned) == ['2:1-100', '1:101-200']
 
 
-def test_assign_bins_missing_outside_bins(bins):
+def test_assign_position_bins_missing_outside_bins(bins):
     # past the last bin, unknown chromosome, before the first bin
-    assigned = assign_bins(positions(['1', '1', '3', '1'], [50, 301, 10, 0]), bins)
+    assigned = assign_position_bins(positions(['1', '1', '3', '1'], [50, 301, 10, 0]), bins)
 
     assert assigned.iloc[0] == '1:1-100'
     assert assigned.iloc[1:].isnull().all()
 
 
-def test_assign_bins_other_column_names(bins):
+def test_assign_position_bins_other_column_names(bins):
     snps = pd.DataFrame({'chr': ['1', '2'], 'coord': [150, 1]})
 
-    assigned = assign_bins(snps, bins, chr_col='chr', position_col='coord')
+    assigned = assign_position_bins(snps, bins, chr_col='chr', position_col='coord')
 
     assert list(assigned) == ['1:101-200', '2:1-100']
 
 
-def test_assign_bins_requires_columns(bins):
+def test_assign_position_bins_requires_columns(bins):
     with pytest.raises(ValueError, match="positions missing columns \\['chromosome'\\]"):
-        assign_bins(pd.DataFrame({'chr': ['1'], 'position': [1]}), bins)
+        assign_position_bins(pd.DataFrame({'chr': ['1'], 'position': [1]}), bins)
