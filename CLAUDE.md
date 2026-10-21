@@ -289,6 +289,10 @@ the never-adopted names are gone.
 | `tl.compute_umap` | layers[layer_name] | obs['UMAP1','UMAP2'] |
 | `tl.rebin` | X, layers, var | returns new rebinned AnnData |
 | `tl.aggregate_clusters` | obs[cluster_field], layers | returns new cluster-level AnnData |
+| `tl.aggregate_pseudobulk` | layers, var | nothing, returns a per-bin DataFrame |
+| `tl.compute_cn_changepoint_matrix` | layers['state','copy'], var['chr','start','gc'] | nothing, returns a bin by cell DataFrame |
+| `tl.assign_position_bins` | positions DataFrame (chromosome, position), bins DataFrame (chr, start, end) | nothing, returns a Series of bin IDs |
+| `pp.calculate_local_baf_variance` | layers['alleleB','totalcounts'], var['chr','start'] | var['local_baf_variance'] |
 
 ## Available Datasets
 
